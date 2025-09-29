@@ -1,0 +1,18 @@
+[
+  {
+    "section": "smme",
+    "code": "smea-form-1",
+    "title": "SMEA Form 1",
+    "version": "1.0",
+    "period_type": "quarter",
+    "open_at": "2025-09-01",
+    "close_at": "2025-09-30",
+    "is_active": true,
+    "schema_descriptor": {
+      "fields": [
+        { "name": "project_name", "type": "text", "required": true },
+        { "name": "completion_rate", "type": "number", "required": true }
+      ]
+    }
+  }
+]
