@@ -1,0 +1,20 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+
+# SQLite database (if using sqlite in dev)
+db.sqlite3
+
+# Django migration logs
+*.log
+
+# VSCode / PyCharm / IDE stuff
+.vscode/
+.idea/
+
+# Static & media (collected or uploaded)
+staticfiles/
+media/
