@@ -1,15 +1,15 @@
-﻿# Organization Data Model (Phase 1)
+# Organization Data (Phase 1)
 
 ## Entities
-- **Section**: `code` (slug), `name`
-- **School**: `code` (slug), `name`, `division`, `district`, `school_type` (optional)
+- **Section**: \code\ (slug), \
+ame\
+- **School**: \code\ (slug), \
+ame\, \division\, \district\, \school_type\ (optional)
 
-## Seeding Plan
-- Load 6 Sections from `data/sections.seed.json`.
-- Start with a small sample of Schools (5–10) for testing (CSV to be prepared).
-- Later import the full list (~210 schools).
+## Seeds
+- Sections: \data/sections.seed.json\ (6 SGOD sections)
+- Schools (test only for now): \data/schools.sample.csv\ (import later)
 
 ## Usage
-- Every `FormTemplate` belongs to a **Section**.
-- Every `Submission` belongs to a **School** (and indirectly to a Section via the template).
-- Dashboards filter by Section and School (and by district for Section Admins).
+- Every FormTemplate belongs to a **Section**.
+- Every Submission belongs to a **School** (and is scoped in dashboards by district/section).
