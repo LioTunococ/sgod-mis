@@ -11,6 +11,12 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Drop the previous Form1SLPAnalysis from 0005 to avoid duplicate-table errors on fresh DBs.
+        # This intentionally discards old data and is safe for staging/demo environments.
+        migrations.DeleteModel(
+            name='Form1SLPAnalysis',
+        ),
+
         # Create the new Form1SLPAnalysis model with per-row analysis
         migrations.CreateModel(
             name='Form1SLPAnalysis',
