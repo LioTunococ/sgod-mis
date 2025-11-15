@@ -394,9 +394,11 @@ a:focus {
   vertical-align: top;
 }
 
-/* Make SLP columns predictable and wrap long content well */
+/* SLP table: allow natural width so horizontal scroll works */
 .slp-table {
-  table-layout: fixed;
+  table-layout: auto;
+  width: max-content; /* exceed container when needed */
+  min-width: 100%;    /* but never smaller than container */
 }
 
 .slp-col-grade {
@@ -419,8 +421,7 @@ a:focus {
 
 .slp-col-llc,
 .slp-col-intervention {
-  width: 340px;
-  min-width: 220px;
+  min-width: 360px;   /* ensure both columns stay readable */
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;

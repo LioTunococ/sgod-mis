@@ -1,980 +1,216 @@
-﻿// Form handling and navigation
-const activityDeleteState = new WeakMap();
+﻿
+// Minimal, stable JS for submission edit page
+console.log("TEST: submission-form.js loaded");
+// Restores: tab navigation, Projects & Activities add/delete, and globals expected by the templates
 
 document.addEventListener('DOMContentLoaded', function() {
-  const form = document.getElementById('submission-form');
-  if (!form) return;
-  
-  const nextTabInput = document.getElementById('id_next_tab');
-  const autosaveInput = document.getElementById('id_autosave');
-  const skipValidationInput = document.getElementById('id_skip_validation');
-  const currentTabKey = form.dataset.currentTab;
-  const expectedTimings = JSON.parse(form.dataset.expectedTimings || '[]');
-  const canEdit = (form.dataset.canEdit === '1');
+  'use strict';
 
-  // Safety: Guard against corrupted form.action like "/.../[object HTMLButtonElement]"
-  document.addEventListener('submit', function(ev) {
-    const f = ev.target;
-    try {
-      if (f && typeof f.action === 'string' && f.action.indexOf('[object') !== -1) {
-        // Reset to current URL (default action)
-        f.removeAttribute('action');
-      }
-    } catch (e) { /* noop */ }
-  });
+  function byId(id) { return document.getElementById(id); }
 
-  // Also sanitize on any action button click
-  document.querySelectorAll('button[name="action"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const f = btn.form || document.getElementById('submission-form');
-      if (f && typeof f.action === 'string' && f.action.indexOf('[object') !== -1) {
-        f.removeAttribute('action');
-      }
-      // Remove any stray formaction on the button
-      if (btn.hasAttribute('formaction')) btn.removeAttribute('formaction');
-    });
-  });
+  // ---------------- Tab nav + form wiring ----------------
+  function initTabsAndForm() {
+    const form = byId('submission-form');
+    if (!form) return;
 
-  // If read-only, hard-disable all inputs inside the form except navigation
-  if (!canEdit) {
-    const controls = form.querySelectorAll('input, textarea, select, button');
-    controls.forEach(el => {
-      // keep hidden and navigation elements functional
-      if (el.type === 'hidden') return;
-      if (el.classList && el.classList.contains('tab-nav')) return;
-      // Top tab links are <a>, not included here
-      try { el.disabled = true; } catch (e) { /* noop */ }
-    });
-  }
-  
-  // Get navigation buttons (may not exist on all tabs)
-  const prevButton = document.querySelector('.prev-tab');
-  const nextButton = document.querySelector('.next-tab');
-  
-  // Exit if required elements not found (but navigation buttons are optional)
-  if (!nextTabInput || !autosaveInput) {
-    console.error('Required form elements not found');
-    return;
-  }
-
-  // Tab configuration (dynamic if provided by server)
-  const DEFAULT_TAB_ORDER = [
-    { key: 'projects', label: 'Projects & Activities' },
-    { key: 'pct', label: '% Implementation' },
-    { key: 'slp', label: 'SLP' },
-    { key: 'reading', label: 'Reading (CRLA/PHILIRI)' },
-    { key: 'rma', label: 'RMA' },
-    { key: 'supervision', label: 'Instructional Supervision & TA' },
-    { key: 'adm', label: 'ADM One-Stop-Shop & EiE' }
-  ];
-  let providedOrder = [];
-  try {
-    providedOrder = JSON.parse(form.dataset.tabOrder || '[]');
-  } catch (e) {
-    providedOrder = [];
-  }
-  const TAB_ORDER = (Array.isArray(providedOrder) && providedOrder.length) ? providedOrder : DEFAULT_TAB_ORDER;
-
-  // Find current tab index
-  const currentTabIndex = TAB_ORDER.findIndex(tab => tab.key === currentTabKey);
-  if (currentTabIndex === -1) {
-    console.error('Invalid current tab:', currentTabKey);
-    return;
-  }
-
-  // Update button states
-  function updateNavigationButtons() {
-    if (prevButton) prevButton.disabled = currentTabIndex <= 0;
-    if (nextButton) nextButton.disabled = currentTabIndex >= TAB_ORDER.length - 1;
-  }
-
-  // Validate form fields before navigation
-  function validateForm() {
-    const requiredInputs = form.querySelectorAll('input[required], textarea[required], select[required]');
-    const emptyFields = [];
-    
-    // Check each required field
-    requiredInputs.forEach(field => {
-      if (!field.offsetParent) {
-        return;
-      }
-      const value = field.value?.trim() || '';
-      const isEmpty = !value || value === '';
-      
-      if (isEmpty) {
-        emptyFields.push(field);
-        field.style.border = '2px solid var(--error-color)';
-        field.style.backgroundColor = '#fee';
-      } else {
-        field.style.border = '';
-        field.style.backgroundColor = '';
-      }
-    });
-    
-    // If there are empty required fields, show error
-    if (emptyFields.length > 0) {
-      const firstEmpty = emptyFields[0];
-      firstEmpty.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      firstEmpty.focus();
-      
-      alert(`Please fill in all required fields before proceeding. (${emptyFields.length} field${emptyFields.length > 1 ? 's' : ''} missing)`);
-      return false;
-    }
-    
-    return true;
-  }
-
-  // Navigate to another tab with validation and autosave
-  function navigateToTab(targetKey) {
-    if (targetKey && targetKey !== currentTabKey) {
-      const targetIndex = TAB_ORDER.findIndex(tab => tab.key === targetKey);
-      const movingForward = targetIndex !== -1 && targetIndex > currentTabIndex;
-
-      // Only block navigation on validation errors when moving forward
-      if (movingForward && !validateForm()) {
-        return false;
-      }
-
-      // Set target tab and autosave flag
-      nextTabInput.value = targetKey;
-      if (skipValidationInput) {
-        skipValidationInput.value = movingForward ? '0' : '1';
-      }
-      autosaveInput.value = '1';
-      form.submit();
-    }
-  }
-
-  // Previous button handler
-  if (prevButton) {
-    prevButton.addEventListener('click', () => {
-      if (currentTabIndex > 0) {
-        navigateToTab(TAB_ORDER[currentTabIndex - 1].key);
-      }
-    });
-  }
-
-  // Next button handler
-  if (nextButton) {
-    nextButton.addEventListener('click', () => {
-      if (currentTabIndex < TAB_ORDER.length - 1) {
-        navigateToTab(TAB_ORDER[currentTabIndex + 1].key);
-      }
-    });
-  }
-
-  // Initialize navigation state
-  updateNavigationButtons();
-
-  // Hook tab navigation buttons
-  document.querySelectorAll('.tab-nav').forEach(button => {
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      const target = button.dataset.navTarget;
-      if (!target) return;
-      if (canEdit) {
-        navigateToTab(target);
-      } else {
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', target);
-        window.location.assign(url.toString());
-      }
-    });
-  });
-
-  // Track which SLP subject is being saved
-  const subjectIdInput = document.getElementById('id_current_subject_id');
-  const subjectPrefixInput = document.getElementById('id_current_subject_prefix');
-  const subjectIndexInput = document.getElementById('id_current_subject_index');
-
-  document.querySelectorAll('.save-subject-btn').forEach(button => {
-    button.addEventListener('click', () => {
-      if (subjectIdInput) subjectIdInput.value = button.dataset.subjectId || '';
-      if (subjectPrefixInput) subjectPrefixInput.value = button.dataset.subjectPrefix || '';
-      if (subjectIndexInput) subjectIndexInput.value = button.dataset.subjectIndex || '';
-    });
-  });
-
-  document.querySelectorAll('button[name="action"][value="save_draft"]').forEach(button => {
-    button.addEventListener('click', () => {
-      if (subjectIdInput) subjectIdInput.value = '';
-      if (subjectPrefixInput) subjectPrefixInput.value = '';
-      if (subjectIndexInput) subjectIndexInput.value = '';
-    });
-  });
-
-  // down or right arrow
-  if (form) {
-    form.addEventListener('submit', function(e) {
-      
-      // Log form data
-      const formData = new FormData(form);
-      for (let [key, value] of formData.entries()) {
-        if (key.includes('slp') || key.includes('action') || key.includes('tab')) {
-        }
-      }
-    });
-  }
-
-  // Tab link navigation (only intercept in edit mode)
-  if (canEdit) {
-    document.querySelectorAll('.tabs a').forEach(link => {
-      link.addEventListener('click', (e) => {
-        const targetTab = link.dataset.tab;
-        if (targetTab && targetTab !== currentTabKey) {
-          e.preventDefault();
-          navigateToTab(targetTab);
+    // Diagnostic: log all DELETE inputs present in the form before submit
+    form.addEventListener('submit', function(ev) {
+      const deleteInputs = Array.from(form.querySelectorAll('input[type="hidden"][name$="-DELETE"]'));
+      console.log('DIAGNOSTIC: DELETE inputs before submit:', deleteInputs.map(i => i.name + '=' + i.value));
+      const totals = Array.from(form.querySelectorAll('input[name$="-TOTAL_FORMS"]')).map(i => i.name + '=' + i.value);
+      console.log('DIAGNOSTIC: TOTAL_FORMS:', totals.join(', '));
+      // Serialize competencies paragraph (enumerated 1-4) directly stored in textarea
+      document.querySelectorAll('.llc-section').forEach(section => {
+        const ta = section.querySelector('textarea.llc-storage');
+        if (!ta) return;
+        // Clean trailing blank enumerated lines (e.g. "1. \n2. \n")
+        const cleaned = ta.value.split(/\n/).map(l => l.trim()).filter(l => l && /\d+\./.test(l));
+        // Preserve original formatting if user entered paragraphs; else rebuild numbered list
+        if (cleaned.length) {
+          ta.value = cleaned.join('\n');
         }
       });
-    });
-  }
-
-  // down or right arrow
-  if (expectedTimings.length) {
-    const timingWarning = document.getElementById('timing-warning');
-    const timingFields = form.querySelectorAll('select[name*="timing"]');
-    const showWarningIfNeeded = () => {
-      let mismatch = false;
-      timingFields.forEach(field => {
-        if (field.value && expectedTimings.indexOf(field.value) === -1) {
-          mismatch = true;
-        }
+      // Serialize reasons selections
+      document.querySelectorAll('.reasons-section').forEach(section => {
+        const hiddenCodes = section.querySelector('input[type="hidden"][name$="-non_mastery_reasons"]');
+        if (!hiddenCodes) return;
+        const codes = [];
+        section.querySelectorAll('input.reason-choice:checked').forEach(cb => codes.push(cb.value));
+        hiddenCodes.value = codes.join(',');
+        const otherHidden = section.querySelector('textarea[name$="-non_mastery_other"]');
+        const otherVisible = section.querySelector('.reason-other textarea');
+        if (otherHidden && otherVisible) otherHidden.value = (otherVisible.value || '').trim();
       });
-      if (timingWarning) {
-        timingWarning.style.display = mismatch ? 'block' : 'none';
-      }
-    };
-    timingFields.forEach(field => field.addEventListener('change', showWarningIfNeeded));
-    showWarningIfNeeded();
-  }
 
-  // SLP: Handle "Offered" checkbox to enable/disable row fields and LLC cards
-  function initializeSLPOfferedToggle() {
-    const cards = document.querySelectorAll('.slp-subject-card');
-    
-    cards.forEach(card => {
-      // Find the "is_offered" checkbox in this card
-      const offeredCheckbox = card.querySelector('input[id$="-is_offered"]');
-      
-      if (!offeredCheckbox) return;
-      
-      function toggleCardFields() {
-        const isOffered = offeredCheckbox.checked;
-        
-        // Get all inputs and textareas in the card except the checkbox and hidden fields
-        const fields = card.querySelectorAll('input:not([id$="-is_offered"]):not([type="hidden"]):not([type="checkbox"]), textarea');
-        
-        fields.forEach(field => {
-          if ('readOnly' in field) {
-            field.readOnly = !isOffered;
-          }
-          field.classList.toggle('slp-field-disabled', !isOffered);
-          
-          if (!isOffered) {
-            if (field.type === 'number') {
-              field.value = '0';
-            } else {
-              field.value = '';
+      // Serialize remediation interventions table to JSON stored in hidden interventions-storage
+      document.querySelectorAll('.interventions-plan').forEach(section => {
+        const storage = section.querySelector('textarea.interventions-storage');
+        if (!storage) return;
+        const subjectContent = section.closest('.subject-content');
+        if (!subjectContent) return;
+        const selected = Array.from(subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => {
+          const labelSpan = cb.closest('label') && cb.closest('label').querySelector('span');
+          const label = labelSpan ? labelSpan.textContent.trim() : (cb.closest('label') ? cb.closest('label').textContent.trim() : cb.value);
+          return { code: cb.value, reason: label };
+        });
+        const data = selected.map(item => {
+          const ta = section.querySelector(`.interventions-pairs textarea.intervention-textarea[data-reason-code="${item.code}"]`);
+          const intervention = ta ? (ta.value || '').trim() : '';
+          return { code: item.code, reason: item.reason, intervention };
+        });
+        try { storage.value = JSON.stringify(data); } catch (e) { storage.value = ''; }
+      });
+      // Serialize Reading Difficulties & Interventions (new structured builder)
+      const rdStorage = document.querySelector('.reading-difficulties-storage');
+      if (rdStorage) {
+        const data = [];
+        document.querySelectorAll('.reading-difficulty-grade').forEach(gradeEl => {
+          const grade = gradeEl.getAttribute('data-grade');
+          const pairs = [];
+          gradeEl.querySelectorAll('.reading-difficulty-pair').forEach(pairEl => {
+            const diffTa = pairEl.querySelector('textarea.reading-difficulty-textarea');
+            const intTa = pairEl.querySelector('textarea.reading-intervention-textarea');
+            const difficulty = diffTa ? (diffTa.value || '').trim() : '';
+            const intervention = intTa ? (intTa.value || '').trim() : '';
+            if (difficulty || intervention) {
+              pairs.push({ difficulty, intervention });
             }
-          }
+          });
+          data.push({ grade, pairs });
         });
-        
-        // Visual feedback - disable sections but NOT the offered checkbox area
-        const proficiencySection = card.querySelector('.proficiency-section');
-        const llcSection = card.querySelector('.llc-section');
-        const interventionSection = card.querySelector('.intervention-section');
-        const strategySection = card.querySelector('.strategy-section');
-        
-        if (!isOffered) {
-          // Disable sections except the checkbox itself
-          if (proficiencySection) {
-            const proficiencyGrid = proficiencySection.querySelector('.proficiency-grid');
-            if (proficiencyGrid) proficiencyGrid.style.pointerEvents = 'none';
-          }
-          if (llcSection) llcSection.style.pointerEvents = 'none';
-          if (interventionSection) interventionSection.style.pointerEvents = 'none';
-          if (strategySection) strategySection.style.pointerEvents = 'none';
-          
-          card.style.opacity = '0.65';
-        } else {
-          // Enable all sections
-          if (proficiencySection) {
-            const proficiencyGrid = proficiencySection.querySelector('.proficiency-grid');
-            if (proficiencyGrid) proficiencyGrid.style.pointerEvents = 'auto';
-          }
-          if (llcSection) llcSection.style.pointerEvents = 'auto';
-          if (interventionSection) interventionSection.style.pointerEvents = 'auto';
-          if (strategySection) strategySection.style.pointerEvents = 'auto';
-          
-          card.style.opacity = '1';
-        }
-        
-        // Update status badge
-        const statusBadge = card.querySelector('.status-badge');
-        if (statusBadge) {
-          if (!isOffered) {
-            statusBadge.textContent = 'Not Offered';
-            statusBadge.classList.remove('incomplete', 'complete');
-            statusBadge.classList.add('not-offered');
-          } else {
-            // Check if subject is actually complete by calling updateProficiencyDisplay
-            // which will calculate the proper status
-            updateProficiencyDisplay(card);
-          }
-        }
-        
-        // Update proficiency display when toggled
-        if (isOffered) {
-          updateProficiencyDisplay(card);
-        }
+        try { rdStorage.value = JSON.stringify(data); } catch(e) { rdStorage.value = '[]'; }
       }
-      
-      // Initialize on page load
-      toggleCardFields();
-      
-      // down or right arrow
-      offeredCheckbox.addEventListener('change', toggleCardFields);
-      
-      // Also update proficiency on input changes
-      const proficiencyInputs = card.querySelectorAll('.proficiency-field input');
-      proficiencyInputs.forEach(input => {
-        input.addEventListener('input', () => updateProficiencyDisplay(card));
-        input.addEventListener('blur', () => updateProficiencyDisplay(card));
-      });
     });
-  }
-  
-  // Initialize SLP toggle if on SLP tab
-  if (currentTabKey === 'slp') {
-    // Critical: Initialize offered toggle immediately (user might click right away)
-    initializeSLPOfferedToggle();
-    
-    // Defer less critical initializations to improve perceived performance
-    if (window.requestIdleCallback) {
-      requestIdleCallback(() => {
-        initializeSLPNestedAccordion();
-        initializeSLPAnalysisTracking();
-      });
-    } else {
-      // down or right arrow
-      setTimeout(() => {
-        initializeSLPNestedAccordion();
-        initializeSLPAnalysisTracking();
-      }, 100);
-    }
-  }
+    const canEdit = (form.dataset.canEdit === '1');
+    const nextTabInput = byId('id_next_tab');
+    const autosaveInput = byId('id_autosave');
+    const skipValidationInput = byId('id_skip_validation');
 
-  // down or right arrow
-  function initializeSLPNestedAccordion() {
-    // down or right arrow
-    const cards = document.querySelectorAll('.slp-subject-card');
-    cards.forEach(card => {
-      updateProficiencyDisplay(card);
+    // Guard corrupted action
+    document.addEventListener('submit', function(ev) {
+      try {
+        const f = ev.target;
+        if (f && typeof f.action === 'string' && f.action.indexOf('[object') !== -1) {
+          f.removeAttribute('action');
+        }
+      } catch (e) {}
     });
-  }
 
-  // down or right arrow
-  window.toggleGrade = function(gradeId) {
-    const container = document.getElementById('grade-' + gradeId);
-    if (!container) {
-      console.error('Container not found for gradeId:', gradeId);
-      return;
-    }
-    const gradeAccordion = container.parentElement;
-    const header = gradeAccordion.querySelector('.grade-header');
-    const icon = header ? header.querySelector('.accordion-icon') : null;
-    const shouldOpen = container.style.display === 'none' || container.style.display === '';
-
-    container.style.display = shouldOpen ? 'block' : 'none';
-    if (icon) {
-      icon.textContent = shouldOpen ? String.fromCharCode(9660) : String.fromCharCode(9654); // down or right arrow
-    }
-    gradeAccordion.classList.toggle('open', shouldOpen);
-  };
-
-  window.toggleSubject = function(subjectId) {
-    const content = document.getElementById('subject-' + subjectId);
-    if (!content) {
-      console.error('Subject content not found for ID:', subjectId);
-      return;
-    }
-    const accordion = content.closest('.subject-accordion');
-    const header = accordion ? accordion.querySelector('.subject-header') : null;
-    const icon = header ? header.querySelector('.accordion-icon') : null;
-    const shouldOpen = content.style.display === 'none' || content.style.display === '';
-
-    content.style.display = shouldOpen ? 'block' : 'none';
-    if (icon) {
-      icon.textContent = shouldOpen ? String.fromCharCode(9660) : String.fromCharCode(9654); // down or right arrow
-    }
-    if (shouldOpen) {
-      if (header) {
-        header.classList.add('expanded');
-      }
-
-      // Update proficiency display when subject is expanded
-      updateProficiencyDisplay(content);
-
-      // down or right arrow
-      const proficiencyInputs = content.querySelectorAll('input[id$="-enrolment"], input[id$="-dnme"], input[id$="-fs"], input[id$="-s"], input[id$="-vs"], input[id$="-o"]');
-      proficiencyInputs.forEach(input => {
-        input.addEventListener('input', () => {
-          updateProficiencyDisplay(content);
-        });
-      });
-    } else {
-      if (header) {
-        header.classList.remove('expanded');
-      }
-    }
-  };
-
-  // Update proficiency percentage display
-  function updateProficiencyDisplay(subjectContent) {
-    // Find the proficiency inputs within this subject content
-    const enrolmentInput = subjectContent.querySelector('input[id$="-enrolment"]');
-    const dnmeInput = subjectContent.querySelector('input[id$="-dnme"]');
-    const fsInput = subjectContent.querySelector('input[id$="-fs"]');
-    const sInput = subjectContent.querySelector('input[id$="-s"]');
-    const vsInput = subjectContent.querySelector('input[id$="-vs"]');
-    const oInput = subjectContent.querySelector('input[id$="-o"]');
-    
-    if (!enrolmentInput) return;
-    
-    // Get the form index from any input's ID
-    const inputId = enrolmentInput.id; // e.g., "id_slp_rows-0-enrolment"
-    const formIndex = inputId.match(/-(\d+)-/)?.[1];
-    if (!formIndex) return;
-    
-    const enrolment = parseInt(enrolmentInput.value) || 0;
-    const dnme = parseInt(dnmeInput?.value) || 0;
-    const fs = parseInt(fsInput?.value) || 0;
-    const s = parseInt(sInput?.value) || 0;
-    const vs = parseInt(vsInput?.value) || 0;
-    const o = parseInt(oInput?.value) || 0;
-        
-    // Calculate percentages
-    const dnmePct = enrolment > 0 ? ((dnme / enrolment) * 100).toFixed(1) : 0;
-    const fsPct = enrolment > 0 ? ((fs / enrolment) * 100).toFixed(1) : 0;
-    const sPct = enrolment > 0 ? ((s / enrolment) * 100).toFixed(1) : 0;
-    const vsPct = enrolment > 0 ? ((vs / enrolment) * 100).toFixed(1) : 0;
-    const oPct = enrolment > 0 ? ((o / enrolment) * 100).toFixed(1) : 0;
-    
-    
-    
-    // Validate proficiency sum
-    const proficiencySum = dnme + fs + s + vs + o;
-    const proficiencySection = subjectContent.querySelector('[data-section="proficiency"]');
-    const errorContainer = proficiencySection?.querySelector('.validation-errors');
-    const errorMessages = proficiencySection?.querySelector('.error-messages');
-    
-    if (enrolment > 0 && proficiencySum !== enrolment) {
-      // Show error
-      if (errorContainer && errorMessages) {
-        errorContainer.style.display = 'flex';
-        errorMessages.innerHTML = `<div class="message message--error">Total proficiency counts (${proficiencySum}) must equal enrollment (${enrolment})</div>`;
-      }
-      // Mark inputs as error
-      [dnmeInput, fsInput, sInput, vsInput, oInput].forEach(input => {
-        if (input) input.classList.add('error');
-      });
-    } else {
-      // Hide error
-      if (errorContainer) {
-        errorContainer.style.display = 'none';
-      }
-      // down or right arrow
-      [dnmeInput, fsInput, sInput, vsInput, oInput].forEach(input => {
-        if (input) input.classList.remove('error');
-      });
-    }
-  }
-
-  // Track completion of SLP subject sections
-  function initializeSLPAnalysisTracking() {
-    const cards = document.querySelectorAll('.slp-subject-card');
-    cards.forEach(card => {
-      const formIndex = card.dataset.formIndex;
-
-      const enrolmentInput = card.querySelector('input[id$="-enrolment"]');
-      const llcTextarea = card.querySelector('textarea[id$="-top_three_llc"]');
-      const interventionTextarea = card.querySelector('textarea[id$="-intervention_plan"]');
-      const strategyTextarea = card.querySelector('.strategy-textarea');
-
-      const statusBadge = card.querySelector('.status-badge');
-      const progressFill = card.querySelector(`[data-progress="${formIndex}"]`);
-      const progressText = card.querySelector(`[data-progress-text="${formIndex}"]`);
-      const offeredCheckbox = card.querySelector('input[id$="-is_offered"]');
-
-      function updateProgress() {
-        if (offeredCheckbox && !offeredCheckbox.checked) {
-          if (statusBadge) {
-            statusBadge.textContent = 'Not Offered';
-            statusBadge.classList.remove('incomplete', 'complete');
-            statusBadge.classList.add('not-offered');
-          }
-          if (progressFill) {
-            progressFill.style.width = '0%';
-          }
-          if (progressText) {
-            progressText.textContent = 'Not offered';
-          }
+    // Tab buttons
+    document.querySelectorAll('.tab-nav').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = this.dataset.navTarget;
+        if (!target) return;
+        if (!canEdit) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', target);
+          window.location.assign(url.toString());
           return;
         }
-
-        let filledCount = 0;
-        let totalFields = 3 + (strategyTextarea ? 1 : 0);
-
-        if (enrolmentInput && enrolmentInput.value.trim().length > 0) {
-          filledCount++;
-        }
-        if (llcTextarea && llcTextarea.value.trim().length > 0) {
-          filledCount++;
-        }
-        if (interventionTextarea && interventionTextarea.value.trim().length > 0) {
-          filledCount++;
-        }
-        if (strategyTextarea && strategyTextarea.value.trim().length > 0) {
-          filledCount++;
-        }
-
-        const percentage = totalFields > 0 ? Math.round((filledCount / totalFields) * 100) : 0;
-
-        if (progressFill) {
-          progressFill.style.width = `${percentage}%`;
-        }
-        if (progressText) {
-          progressText.textContent = `${percentage}% complete`;
-        }
-
-        if (statusBadge) {
-          statusBadge.classList.remove('incomplete', 'complete', 'not-offered');
-          if (percentage === 100) {
-            statusBadge.textContent = 'Complete';
-            statusBadge.classList.add('complete');
-          } else {
-            statusBadge.textContent = 'Incomplete';
-            statusBadge.classList.add('incomplete');
-          }
-        }
-      }
-
-      [enrolmentInput, llcTextarea, interventionTextarea, strategyTextarea].forEach(field => {
-        if (field) {
-          field.addEventListener('input', updateProgress);
-          field.addEventListener('blur', updateProgress);
-        }
-      });
-
-      if (offeredCheckbox) {
-        offeredCheckbox.addEventListener('change', updateProgress);
-      }
-
-      updateProgress();
-    });
-  }
-
-  // Validate subject before saving
-  function validateSubject(subjectContent) {
-    const errors = [];
-    
-    // Check if subject is offered
-    const offeredCheckbox = subjectContent.querySelector('input[id$="-is_offered"]');
-    if (!offeredCheckbox || !offeredCheckbox.checked) {
-      // Subject not offered - skip validation
-      return { valid: true, errors: [] };
-    }
-    
-    // Get form index
-    const enrolmentInput = subjectContent.querySelector('input[id$="-enrolment"]');
-    if (!enrolmentInput) return { valid: true, errors: [] };
-    
-    const inputId = enrolmentInput.id;
-    const formIndex = inputId.match(/-(\d+)-/)?.[1];
-    if (!formIndex) return { valid: true, errors: [] };
-    
-    // Get all inputs
-    const enrolment = parseInt(enrolmentInput.value) || 0;
-    const dnme = parseInt(subjectContent.querySelector('input[id$="-dnme"]')?.value) || 0;
-    const fs = parseInt(subjectContent.querySelector('input[id$="-fs"]')?.value) || 0;
-    const s = parseInt(subjectContent.querySelector('input[id$="-s"]')?.value) || 0;
-    const vs = parseInt(subjectContent.querySelector('input[id$="-vs"]')?.value) || 0;
-    const o = parseInt(subjectContent.querySelector('input[id$="-o"]')?.value) || 0;
-    const llc = subjectContent.querySelector('textarea[id$="-top_three_llc"]')?.value.trim() || '';
-    const intervention = subjectContent.querySelector('textarea[id$="-intervention_plan"]')?.value.trim() || '';
-    
-    // Validation 1: Proficiency must equal enrollment
-    const proficiencySum = dnme + fs + s + vs + o;
-    if (enrolment > 0 && proficiencySum !== enrolment) {
-      errors.push({
-        section: 'proficiency',
-        message: `Total proficiency counts (${proficiencySum}) must equal enrollment (${enrolment})`
-      });
-    }
-    
-    // Validation 2: LLC should have content
-    if (enrolment > 0 && llc.length < 10) {
-      errors.push({
-        section: 'llc',
-        message: 'Top 3 LLC must be at least 10 characters'
-      });
-    }
-    
-    // Validation 3: Intervention should have content - REMOVED per user request
-    // if (enrolment > 0 && intervention.length < 20) {
-    //   errors.push({
-    //     section: 'intervention',
-    //     message: 'Intervention plan must be at least 20 characters'
-    //   });
-    // }
-    
-    return {
-      valid: errors.length === 0,
-      errors: errors
-    };
-  }
-
-  // Display validation errors in sections
-  function displayValidationErrors(subjectContent, errors) {
-    // Clear all existing errors first
-    subjectContent.querySelectorAll('.validation-errors').forEach(container => {
-      container.style.display = 'none';
-      const messages = container.querySelector('.error-messages');
-      if (messages) messages.innerHTML = '';
-    });
-    
-    // down or right arrow
-    subjectContent.querySelectorAll('input.error, textarea.error').forEach(el => {
-      el.classList.remove('error');
-    });
-    
-    // Display new errors
-    errors.forEach(error => {
-      const section = subjectContent.querySelector(`[data-section="${error.section}"]`);
-      if (section) {
-        const errorContainer = section.querySelector('.validation-errors');
-        const errorMessages = section.querySelector('.error-messages');
-        
-        if (errorContainer && errorMessages) {
-          errorContainer.style.display = 'flex';
-          errorMessages.innerHTML += `<div class="message message--error">${error.message}</div>`;
-        }
-        
-        // down or right arrow
-        if (error.section === 'proficiency') {
-          ['dnme', 'fs', 's', 'vs', 'o'].forEach(field => {
-            const input = section.querySelector(`input[id$="-${field}"]`);
-            if (input) input.classList.add('error');
-          });
-        } else if (error.section === 'llc') {
-          const textarea = section.querySelector('textarea[id$="-top_three_llc"]');
-          if (textarea) textarea.classList.add('error');
-        } else if (error.section === 'intervention') {
-          const textarea = section.querySelector('textarea[id$="-intervention_plan"]');
-          if (textarea) textarea.classList.add('error');
-        }
-      }
-    });
-  }
-
-  // down or right arrow
-  function scrollToFirstError(subjectContent) {
-    const firstError = subjectContent.querySelector('.validation-errors[style*="flex"]');
-    if (firstError) {
-      firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
-
-  // Note: Save subject buttons work via native form submission (type="submit")
-  // But we add validation before allowing submission
-  document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('save-subject-btn')) {
-      const subjectContent = e.target.closest('.subject-content');
-      if (subjectContent) {
-        // down or right arrow
-        
-        // Don't prevent default - let the form submit naturally
-        // e.preventDefault(); // COMMENTED OUT
-        
-        // const validation = validateSubject(subjectContent);
-        
-        // if (!validation.valid) {
-        //   e.preventDefault(); // Stop form submission
-        //   displayValidationErrors(subjectContent, validation.errors);
-        //   scrollToFirstError(subjectContent);
-        //   
-        //   // Shake the button
-        //   e.target.classList.add('shake-error');
-        //   setTimeout(() => e.target.classList.remove('shake-error'), 600);
-        //   
-        //   return false;
-        // }
-        
-        // Valid - allow submission (remove alert, just show saving state)
-        const originalText = e.target.textContent;
-        e.target.textContent = 'Saving...';
-        e.target.disabled = true;
-        
-        
-        // Force form submission since something is blocking it
-        const form = e.target.form || e.target.closest('form');
-        if (form) {
-            form.submit();
-        } else {
-            console.error('No form found for button!');
-        }
-        
-        // Fallback: Reset button after 10 seconds in case something goes wrong
-        setTimeout(() => {
-          if (e.target.textContent === 'Saving...') {
-            e.target.textContent = originalText;
-            e.target.disabled = false;
-            console.warn('Save button reset after timeout - check for server errors');
-          }
-        }, 10000);
-        
-        // Return false to prevent any other handlers from interfering
-        return false;
-      }
-    }
-  }); // REMOVED capture phase - let it bubble normally
-
-  // Reset save buttons if page loaded with validation errors
-  function resetSaveButtons() {
-    const saveButtons = document.querySelectorAll('.save-subject-btn');
-    saveButtons.forEach(button => {
-      if (button.textContent === 'Saving...') {
-        button.textContent = 'Save This Subject';
-        button.disabled = false;
-      }
-    });
-  }
-
-  // Check if there are validation errors on page load and reset buttons
-  const hasValidationErrors = document.querySelector('.validation-errors:not([style*="display: none"]), .errorlist, .alert-danger, .error');
-  if (hasValidationErrors) {
-    resetSaveButtons();
-  }
-
-  // Update proficiency displays when input values change
-  const slpRows = document.querySelectorAll('.slp-row');
-  slpRows.forEach(row => {
-    const inputs = row.querySelectorAll('input[type="number"]');
-    inputs.forEach(input => {
-      input.addEventListener('input', () => {
-        const subjectContent = row.closest('.subject-content');
-        if (subjectContent) {
-          updateProficiencyDisplay(subjectContent);
-        }
+        if (nextTabInput) nextTabInput.value = target;
+        if (skipValidationInput) skipValidationInput.value = '1';
+        if (autosaveInput) autosaveInput.value = '1';
+        form.submit();
       });
     });
-  });
-
-  // Handle "Subject Offered" checkbox toggle
-  function toggleOfferedSections(checkbox) {
-    const subjectContent = checkbox.closest('.subject-content');
-    if (!subjectContent) return;
-    
-    const notOfferedMessage = subjectContent.querySelector('.not-offered-message');
-    const proficiencyGrid = subjectContent.querySelector('.proficiency-grid');
-    const cardSections = subjectContent.querySelectorAll('.card-section:not(.proficiency-section)');
-    const saveButton = subjectContent.querySelector('.save-subject-btn');
-    
-    if (checkbox.checked) {
-      // Subject is offered - show all sections
-      if (notOfferedMessage) notOfferedMessage.style.display = 'none';
-      if (proficiencyGrid) proficiencyGrid.style.display = '';
-      cardSections.forEach(section => section.style.display = 'block');
-      if (saveButton) saveButton.style.display = '';
-    } else {
-      // Subject not offered - hide sections and show message
-      if (notOfferedMessage) notOfferedMessage.style.display = 'block';
-      if (proficiencyGrid) proficiencyGrid.style.display = 'none';
-      cardSections.forEach(section => section.style.display = 'none');
-      if (saveButton) saveButton.style.display = 'none';
-      
-      // Clear any validation errors
-      const validationErrors = subjectContent.querySelector('.validation-errors');
-      if (validationErrors) validationErrors.style.display = 'none';
-      
-      // down or right arrow
-      subjectContent.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
-    }
   }
-  
-  // Initialize offered checkbox listeners
-  document.querySelectorAll('input[id$="-is_offered"]').forEach(checkbox => {
-    // Set initial state
-    toggleOfferedSections(checkbox);
-    
-    // down or right arrow
-    checkbox.addEventListener('change', function() {
-      toggleOfferedSections(this);
-    });
-  });
-});
 
-// ============================================
-// READING ASSESSMENT MATRIX CALCULATIONS
-// ============================================
-
-/**
- * Calculate totals for reading assessment matrices
- * Updates row totals and grand totals dynamically
- */
-function initReadingMatrixCalculations() {
-  const matrices = document.querySelectorAll('.reading-matrix-table');
-  
-  matrices.forEach(matrix => {
-    const inputs = matrix.querySelectorAll('input[type="number"]');
-    
-    // Add event listeners to all inputs
-    inputs.forEach(input => {
-      input.addEventListener('input', () => updateMatrixTotals(matrix));
+  // ---------------- Projects ----------------
+  function renumberProjects() {
+    const sections = Array.from(document.querySelectorAll('.project-section'));
+    const totalInput = document.querySelector('input[name="projects-TOTAL_FORMS"]');
+    if (totalInput) totalInput.value = String(sections.length);
+    sections.forEach((section, idx) => {
+      section.setAttribute('data-project-index', String(idx));
+              // Log the bin contents immediately after appending
+              console.log('DIAGNOSTIC: bin.innerHTML after append', bin.innerHTML);
+      section.querySelectorAll('input[name^="projects-"], select[name^="projects-"]').forEach(el => {
+        const name = el.getAttribute('name');
+        const id = el.getAttribute('id') || '';
+        if (name) el.setAttribute('name', name.replace(/^projects-\d+-/, `projects-${idx}-`));
+        if (id) el.setAttribute('id', id.replace(/^id_projects-\d+-/, `id_projects-${idx}-`));
+      });
     });
-    
-    // Calculate initial totals
-    updateMatrixTotals(matrix);
-  });
-}
-
-/**
- * Update all totals in a reading matrix table
- */
-function updateMatrixTotals(matrix) {
-  let grandTotal = 0;
-  
-  // Calculate row totals
-  const rows = matrix.querySelectorAll('tbody tr:not(.total-row)');
-  rows.forEach(row => {
-    const inputs = row.querySelectorAll('input[type="number"]');
-    let rowTotal = 0;
-    
-    inputs.forEach(input => {
-      const value = parseInt(input.value) || 0;
-      rowTotal += value;
-    });
-    
-    // Update row total display
-    const totalCell = row.querySelector('.total-value');
-    if (totalCell) {
-      totalCell.textContent = rowTotal;
-    }
-    
-    grandTotal += rowTotal;
-  });
-  
-  // Update grand total
-  const grandTotalCell = matrix.querySelector('[data-grand-total]');
-  if (grandTotalCell) {
-    grandTotalCell.textContent = grandTotal;
   }
-}
 
-// Initialize reading matrix calculations when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initReadingMatrixCalculations);
-} else {
-  initReadingMatrixCalculations();
-}
-
-// ============================================================================
-// PROJECTS & ACTIVITIES MANAGEMENT
-// ============================================================================
-
-/**
- * Initialize projects and activities handlers
- */
-function initProjectsAndActivities() {
-  // Attach delete confirmations for existing rows
-  try { attachActivityDeleteHandlers(); } catch (e) { /* noop */ }
-  try { attachProjectDeleteHandlers(); } catch (e) { /* noop */ }
-  // Normalize any DELETE boxes already checked (e.g., after validation errors)
-  normalizeExistingActivityDeletions();
-}
-
-/**
- * Attach delete handlers to project DELETE checkboxes
- */
-function attachProjectDeleteHandlers() {
-  const projectDeleteCheckboxes = document.querySelectorAll('input[name*="projects-"][name*="DELETE"]');
-  projectDeleteCheckboxes.forEach(function(checkbox) {
-    checkbox.removeEventListener('click', handleProjectDelete);
-    checkbox.addEventListener('click', handleProjectDelete);
-  });
-
-  const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
-  projectDeleteButtons.forEach(function(btn){
-    btn.removeEventListener('click', handleProjectDeleteButtonClick);
-    btn.addEventListener('click', handleProjectDeleteButtonClick);
-  });
-}
-
-/**
- * Handle project deletion
- */
-function handleProjectDelete(e) {
-  const checkbox = e.target;
-  const projectSection = checkbox.closest('.project-section');
-  
-  if (checkbox.checked) {
-    if (confirm('Are you sure you want to remove this project? All activities will also be removed.')) {
-      // If this is a new project (no ID), remove it completely
-      const hiddenIdInput = projectSection.querySelector('input[name*="-id"]');
-      if (!hiddenIdInput || !hiddenIdInput.value) {
-        projectSection.remove();
-      } else {
-        // down or right arrow
-        projectSection.classList.add('marked-for-deletion');
-        projectSection.style.opacity = '0.5';
-      }
-    } else {
-      checkbox.checked = false;
-    }
-  } else {
-    // down or right arrow
-    projectSection.classList.remove('marked-for-deletion');
-    projectSection.style.opacity = '';
+  function handleProjectDeleteButtonClick(e) {
+    const section = e.target.closest('.project-section');
+    if (!section) return;
+    const del = section.querySelector('input[name^="projects-"][name$="-DELETE"]');
+    if (!del) return;
+    del.checked = true;
+    handleProjectDelete({ target: del });
   }
-}
 
-/**
- * Add a new project row
- */
-  window.addProjectRow = function addProjectRow() {
-    const projectsContainer = document.querySelector('#submission-form .card');
+  function handleProjectDelete(e) {
+    const checkbox = e.target;
+    const section = checkbox.closest('.project-section');
+    const form = byId('submission-form');
     const totalFormsInput = document.querySelector('input[name="projects-TOTAL_FORMS"]');
-    
-    if (!totalFormsInput) {
-      console.error('Projects TOTAL_FORMS input not found');
-      return;
+    const hiddenIdInput = section ? section.querySelector('input[name^="projects-"][name$="-id"]') : null;
+    const idxMatch = hiddenIdInput && hiddenIdInput.name ? hiddenIdInput.name.match(/^projects-(\d+)-id$/) : null;
+    const projectIndex = idxMatch ? parseInt(idxMatch[1], 10) : (section ? parseInt(section.getAttribute('data-project-index') || '0', 10) : 0);
+
+    if (checkbox.checked) {
+      if (!confirm('Are you sure you want to remove this project? All activities will also be removed.')) { checkbox.checked = false; return; }
+
+      if (hiddenIdInput && hiddenIdInput.value) {
+        // Existing: keep minimal hidden deleted form and remove section immediately
+        let bin = form ? form.querySelector('#project-delete-bin') : null;
+        if (!bin && form) { bin = document.createElement('div'); bin.id='project-delete-bin'; bin.style.display='none'; form.appendChild(bin); }
+        if (bin) {
+          const delName = `projects-${projectIndex}-DELETE`;
+          const idName = `projects-${projectIndex}-id`;
+          bin.querySelectorAll(`input[name="${delName}"]`).forEach(n => n.remove());
+          bin.querySelectorAll(`input[name="${idName}"]`).forEach(n => n.remove());
+          const delInput = document.createElement('input'); delInput.type='hidden'; delInput.name=delName; delInput.value='on';
+          const idInput = document.createElement('input'); idInput.type='hidden'; idInput.name=idName; idInput.value=hiddenIdInput.value;
+          bin.appendChild(delInput); bin.appendChild(idInput);
+        }
+        if (section) section.remove();
+        return;
+      }
+
+      // New: remove and renumber
+      if (section) section.remove();
+      if (totalFormsInput) totalFormsInput.value = String(Math.max(0, (parseInt(totalFormsInput.value || '0', 10) - 1)));
+      renumberProjects();
+    } else {
+      if (section) { section.classList.remove('marked-for-deletion'); section.style.opacity=''; }
     }
-    
-    if (!projectsContainer) {
-      console.error('Projects container not found');
-      return;
-    }
-    
-    const currentTotal = parseInt(totalFormsInput.value);
-    const formIndex = currentTotal;
-    
-    // Create new project section
-    const newProjectSection = document.createElement('div');
-    newProjectSection.className = 'project-section';
-    newProjectSection.setAttribute('data-project-index', currentTotal);
-    newProjectSection.style.marginBottom = '2rem';
-    
-    newProjectSection.innerHTML = `
+  }
+
+  function attachProjectDeleteHandlers() {
+    document.querySelectorAll('input[name^="projects-"][name$="-DELETE"]').forEach(cb => {
+      cb.removeEventListener('click', handleProjectDelete);
+      cb.addEventListener('click', handleProjectDelete);
+    });
+    document.querySelectorAll('.project-delete-btn').forEach(btn => {
+      btn.removeEventListener('click', handleProjectDeleteButtonClick);
+      btn.addEventListener('click', handleProjectDeleteButtonClick);
+    });
+  }
+
+  function addProjectRow() {
+    const totalFormsInput = document.querySelector('input[name="projects-TOTAL_FORMS"]');
+    const container = document.querySelector('#submission-form .card');
+    if (!totalFormsInput || !container) return;
+    const idx = parseInt(totalFormsInput.value || '0', 10);
+    const div = document.createElement('div');
+    div.className='project-section';
+    div.setAttribute('data-project-index', String(idx));
+    div.innerHTML = `
       <div class="project-header">
-        <input type="hidden" name="projects-${formIndex}-id" id="id_projects-${formIndex}-id">
+        <input type="hidden" name="projects-${idx}-id" id="id_projects-${idx}-id">
         <div class="project-header-grid">
           <div class="form-field">
-            <label class="form-label">Project:</label>
-            <input type="text" name="projects-${formIndex}-project_title" id="id_projects-${formIndex}-project_title" class="form-input" required>
+            <label class="form-label" for="id_projects-${idx}-project_title">Project:</label>
+            <input type="text" name="projects-${idx}-project_title" id="id_projects-${idx}-project_title" class="form-input" required>
           </div>
           <div class="form-field">
-            <label class="form-label">Area of Concern:</label>
-            <select name="projects-${formIndex}-area_of_concern" id="id_projects-${formIndex}-area_of_concern" class="form-input" required>
+            <label class="form-label" for="id_projects-${idx}-area_of_concern">Area of Concern:</label>
+            <select name="projects-${idx}-area_of_concern" id="id_projects-${idx}-area_of_concern" class="form-input" required>
               <option value="">-- Select Area of Concern --</option>
               <option value="Access">Access</option>
               <option value="Quality">Quality</option>
@@ -983,1023 +219,1013 @@ function handleProjectDelete(e) {
             </select>
           </div>
           <div class="form-field">
-            <label class="form-label">Conference Date:</label>
-            <input type="date" name="projects-${formIndex}-conference_date" id="id_projects-${formIndex}-conference_date" class="form-input table-date">
+            <label class="form-label" for="id_projects-${idx}-conference_date">Conference Date:</label>
+            <input type="date" name="projects-${idx}-conference_date" id="id_projects-${idx}-conference_date" class="form-input table-date">
           </div>
         </div>
-        <div class="form-field" style="margin-top: var(--space-3); display: flex; justify-content: flex-end;">
-          <input type="checkbox" name="projects-${formIndex}-DELETE" id="id_projects-${formIndex}-DELETE" style="display:none">
+        <div class="form-field" style="margin-top:.5rem; display:flex; justify-content:flex-end;">
+          <input type="checkbox" name="projects-${idx}-DELETE" id="id_projects-${idx}-DELETE" style="display:none">
           <button type="button" class="btn btn--danger project-delete-btn">Delete Project</button>
         </div>
-      </div>
-      
-      <!-- Save Project Notice -->
-      <div class="save-project-notice" style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: var(--border-radius); padding: 1rem; margin: 1rem 0;">
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="color: #f59e0b; font-size: 1.25rem;">!</div>
-          <div>
-            <p style="margin: 0; font-weight: 600; color: #92400e;">Save Project First</p>
-            <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: #78350f;">
-              Fill in the project details above, then click "Save Draft" to unlock the activities section.
-            </p>
+        <div class="save-project-notice" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:.5rem;padding:1rem;margin:1rem 0;">
+          <div style="display:flex;align-items:center;gap:.75rem;">
+            <div style="color:#f59e0b;font-size:1.25rem;">!</div>
+            <div>
+              <p style="margin:0;font-weight:600;color:#92400e;">Save Project First</p>
+              <p style="margin:.25rem 0 0 0;font-size:.875rem;color:#78350f;">Fill in the project details above, then click "Save Draft" to unlock the activities section.</p>
+            </div>
           </div>
+          <button type="button" class="btn btn--primary save-project-btn" style="margin-top:.75rem;font-size:.875rem;">Save This Project</button>
         </div>
-        <button type="button" 
-                class="btn btn--primary save-project-btn" 
-                style="margin-top: 0.75rem; font-size: 0.875rem;"
-                onclick="saveProjectQuick(${formIndex})">
-          Save This Project
-        </button>
-      </div>
-    `;
-    
-    // Find the Add Project button container and insert before it
-    const addButton = document.querySelector('.btn.btn--primary[onclick="addProjectRow()"]');
-    if (addButton) {
-      const addButtonContainer = addButton.parentElement;
-      projectsContainer.insertBefore(newProjectSection, addButtonContainer);
-    } else {
-      // Fallback: append before the last child (button container)
-      const children = projectsContainer.children;
-      if (children.length > 1) {
-        projectsContainer.insertBefore(newProjectSection, children[children.length - 1]);
-      } else {
-        projectsContainer.appendChild(newProjectSection);
-      }
-    }
-    
-    // Note: no activity details row here; details belong to activities, not project creation
-    // Increment TOTAL_FORMS
-    totalFormsInput.value = currentTotal + 1;
-
-    // Reattach delete handlers for projects
+      </div>`;
+    const addBtn = document.querySelector('.btn.btn--primary[onclick="addProjectRow()"]');
+    const anchor = addBtn ? addBtn.parentElement : container;
+    container.insertBefore(div, anchor);
+    totalFormsInput.value = String(idx + 1);
     attachProjectDeleteHandlers();
-    
-    // Focus the first input in the new project
-    const firstInput = newProjectSection.querySelector('input[type="text"]');
-    if (firstInput) {
-      setTimeout(() => firstInput.focus(), 100);
-    }
-    
-  };
-
-/**
- * Add a new activity row to a specific project
- */
-  window.addActivityRow = function addActivityRow(projectId) {
-    // down or right arrow
-    const tbody = document.querySelector(`.activity-table-body[data-project-id="${projectId}"]`);
-    
-    // Check if projectId is valid (not null/undefined)
-    if (!projectId || projectId === 'None' || projectId === 'null') {
-      alert('Please save this project first before adding activities.');
-      return;
-    }
-    
-    if (!tbody) {
-      console.error('Activity table body not found for project:', projectId);
-      
-      // Check if this is a new project that needs to be saved first
-      const projectSections = document.querySelectorAll('.project-section');
-      let foundUnsavedProject = false;
-      
-      projectSections.forEach(section => {
-        const notice = section.querySelector('.save-project-notice');
-        if (notice) {
-          foundUnsavedProject = true;
-        }
-      });
-      
-      if (foundUnsavedProject) {
-        alert('Please save the project first by clicking the "Save This Project" button, then you can add activities.');
-      } else {
-        alert('Cannot add activities to this project. Please refresh the page and try again.');
-      }
-      return;
-    }
-    
-    let firstRow = tbody.querySelector('.activity-row');
-    
-    if (!firstRow) {
-      console.error('No existing activity rows found for project:', projectId);
-      
-      // First, let's create and add the TOTAL_FORMS input if it doesn't exist
-      let prefix = `activities_${projectId}`;
-      let totalFormsInput = document.querySelector(`input[name="${prefix}-TOTAL_FORMS"]`);
-      
-      if (!totalFormsInput) {
-        totalFormsInput = document.createElement('input');
-        totalFormsInput.type = 'hidden';
-        totalFormsInput.name = `${prefix}-TOTAL_FORMS`;
-        totalFormsInput.value = '0';
-        
-        // down or right arrow
-        const form = tbody.closest('form');
-        if (form) {
-          form.appendChild(totalFormsInput);
-        }
-      }
-      
-      // Create the initial management form inputs if they don't exist
-      let initialFormsInput = document.querySelector(`input[name="${prefix}-INITIAL_FORMS"]`);
-      if (!initialFormsInput) {
-        initialFormsInput = document.createElement('input');
-        initialFormsInput.type = 'hidden';
-        initialFormsInput.name = `${prefix}-INITIAL_FORMS`;
-        initialFormsInput.value = '0';
-        const form = tbody.closest('form');
-        if (form) form.appendChild(initialFormsInput);
-      }
-      
-      let minFormsInput = document.querySelector(`input[name="${prefix}-MIN_NUM_FORMS"]`);
-      if (!minFormsInput) {
-        minFormsInput = document.createElement('input');
-        minFormsInput.type = 'hidden';
-        minFormsInput.name = `${prefix}-MIN_NUM_FORMS`;
-        minFormsInput.value = '0';
-        const form = tbody.closest('form');
-        if (form) form.appendChild(minFormsInput);
-      }
-      
-      let maxFormsInput = document.querySelector(`input[name="${prefix}-MAX_NUM_FORMS"]`);
-      if (!maxFormsInput) {
-        maxFormsInput = document.createElement('input');
-        maxFormsInput.type = 'hidden';
-        maxFormsInput.name = `${prefix}-MAX_NUM_FORMS`;
-        maxFormsInput.value = '1000';
-        const form = tbody.closest('form');
-        if (form) form.appendChild(maxFormsInput);
-      }
-      
-      
-      // down or right arrow
-      // Let's create a minimal template row that matches our expected structure
-      const templateRow = document.createElement('tr');
-      templateRow.className = 'activity-row';
-      templateRow.innerHTML = `
-        <input type="hidden" name="activities_${projectId}-0-id" id="id_activities_${projectId}-0-id">
-        <td><textarea name="activities_${projectId}-0-activity" class="table-input table-textarea" placeholder="Enter activity description..." rows="2"></textarea></td>
-        <td><input type="number" name="activities_${projectId}-0-output_target" class="table-input" min="0" step="1"></td>
-        <td><input type="number" name="activities_${projectId}-0-output_actual" class="table-input" min="0" step="1"></td>
-        <td><input type="date" name="activities_${projectId}-0-timeframe_target" class="table-input table-date"></td>
-        <td><input type="date" name="activities_${projectId}-0-timeframe_actual" class="table-input table-date"></td>
-        <td><input type="number" name="activities_${projectId}-0-budget_target" class="table-input" min="0" step="0.01" placeholder="0.00"></td>
-        <td><input type="number" name="activities_${projectId}-0-budget_actual" class="table-input" min="0" step="0.01" placeholder="0.00"></td>
-        <td><textarea name="activities_${projectId}-0-interpretation" class="table-input table-textarea" placeholder="Enter interpretation..." rows="2"></textarea></td>
-        <td><textarea name="activities_${projectId}-0-issues_unaddressed" class="table-input table-textarea" placeholder="Enter issues..." rows="2"></textarea></td>
-        <td><textarea name="activities_${projectId}-0-facilitating_factors" class="table-input table-textarea" placeholder="Enter factors..." rows="2"></textarea></td>
-        <td><textarea name="activities_${projectId}-0-agreements" class="table-input table-textarea" placeholder="Enter agreements..." rows="2"></textarea></td>
-        <td><label class="delete-btn tooltip" data-tooltip="Remove this activity" aria-label="Remove this activity"><input type="checkbox" name="activities_${projectId}-0-DELETE" aria-label="Remove this activity"><span aria-hidden="true">&times;</span><span class="delete-text">Delete</span></label></td>
-      `;
-      
-      // Add template row to tbody and use it as firstRow
-      tbody.appendChild(templateRow);
-      firstRow = templateRow;
-      
-      // Update the TOTAL_FORMS to reflect the new row
-      totalFormsInput.value = '1';
-      
-      
-      // Since we just created the first row, we don't need to create another one
-      // Focus the first input and return early
-      const firstInput = templateRow.querySelector('textarea, input:not([type="hidden"]):not([type="checkbox"])');
-      if (firstInput) {
-        firstInput.focus();
-      }
-      
-      // Reattach delete handlers
-      attachActivityDeleteHandlers();
-      
-      return;
-    }
-    
-    // The formset prefix should be activities_{projectId} based on the Django view
-    let prefix = `activities_${projectId}`;
-    let totalFormsInput = document.querySelector(`input[name="${prefix}-TOTAL_FORMS"]`);
-    
-    
-    // If not found, try other common patterns
-    if (!totalFormsInput) {
-      const possiblePrefixes = [
-        `activities-${projectId}`,
-        `activity_formset_${projectId}`,
-        `form`,
-        'activity'
-      ];
-      
-      for (const testPrefix of possiblePrefixes) {
-        const testInput = document.querySelector(`input[name="${testPrefix}-TOTAL_FORMS"]`);
-        if (testInput) {
-          totalFormsInput = testInput;
-          prefix = testPrefix;
-          break;
-        }
-      }
-    } else {
-    }
-    
-    // Also try to find it by looking at existing form names in the first row
-    if (!totalFormsInput) {
-      const existingInput = firstRow.querySelector('input[name*="-"]');
-      if (existingInput && existingInput.name) {
-        // Extract prefix from existing input name (e.g., "form-0-activity" -> "form")
-        const match = existingInput.name.match(/^(.+)-\d+-/);
-        if (match) {
-          prefix = match[1];
-          totalFormsInput = document.querySelector(`input[name="${prefix}-TOTAL_FORMS"]`);
-        }
-      }
-    }
-    
-    if (!totalFormsInput) {
-      console.warn('TOTAL_FORMS input not found. Creating one...');
-      // down or right arrow
-      const allTotalForms = document.querySelectorAll('input[name*="TOTAL_FORMS"]');
-      
-      // Create the missing TOTAL_FORMS input
-      totalFormsInput = document.createElement('input');
-      totalFormsInput.type = 'hidden';
-      totalFormsInput.name = `${prefix}-TOTAL_FORMS`;
-      totalFormsInput.value = tbody.querySelectorAll('.activity-row').length.toString();
-      
-      // Add it to the form
-      const form = tbody.closest('form');
-      if (form) {
-        form.appendChild(totalFormsInput);
-      } else {
-        console.error('Could not find form to add TOTAL_FORMS input');
-        return;
-      }
-    }
-    
-    
-    const currentTotal = parseInt(totalFormsInput.value);
-    
-    // Create a new row with the correct structure
-    const newRow = document.createElement('tr');
-    newRow.className = 'activity-row';
-    newRow.setAttribute('data-activity-index', currentTotal);
-    
-    // down or right arrow
-    // The activities will be processed differently on the backend
-    const isTemporaryProject = projectId.toString().startsWith('new_');
-    let fieldPrefix = prefix;
-    
-    if (isTemporaryProject) {
-      // down or right arrow
-      fieldPrefix = `temp_activities_${currentTotal}`;
-    }
-    
-    // Create the row HTML with proper form inputs
-    newRow.innerHTML = `
-      <input type="hidden" name="${prefix}-${currentTotal}-id" id="id_${prefix}-${currentTotal}-id">
-      <input type="hidden" name="${prefix}-${currentTotal}-project_temp_id" value="${projectId}" class="temp-project-reference">
-      <td>
-        <div class="text-cell" data-field="activity">
-          <textarea name="${prefix}-${currentTotal}-activity" 
-                    id="id_${prefix}-${currentTotal}-activity" 
-                    class="table-input table-textarea" 
-                    placeholder="Enter activity description..."
-                    rows="2"></textarea>
-        </div>
-      </td>
-      <td>
-        <input type="number" 
-               name="${prefix}-${currentTotal}-output_target" 
-               id="id_${prefix}-${currentTotal}-output_target" 
-               class="table-input" 
-               min="0" 
-               step="1">
-      </td>
-      <td>
-        <input type="number" 
-               name="${prefix}-${currentTotal}-output_actual" 
-               id="id_${prefix}-${currentTotal}-output_actual" 
-               class="table-input" 
-               min="0" 
-               step="1">
-      </td>
-      <td>
-        <input type="date" 
-               name="${prefix}-${currentTotal}-timeframe_target" 
-               id="id_${prefix}-${currentTotal}-timeframe_target" 
-               class="table-input table-date">
-      </td>
-      <td>
-        <input type="date" 
-               name="${prefix}-${currentTotal}-timeframe_actual" 
-               id="id_${prefix}-${currentTotal}-timeframe_actual" 
-               class="table-input table-date">
-      </td>
-      <td>
-        <input type="number" 
-               name="${prefix}-${currentTotal}-budget_target" 
-               id="id_${prefix}-${currentTotal}-budget_target" 
-               class="table-input" 
-               min="0" 
-               step="0.01" 
-               placeholder="0.00">
-      </td>
-      <td>
-        <input type="number" 
-               name="${prefix}-${currentTotal}-budget_actual" 
-               id="id_${prefix}-${currentTotal}-budget_actual" 
-               class="table-input" 
-               min="0" 
-               step="0.01" 
-               placeholder="0.00">
-      </td>
-      <td>\n        <label class="sr-only">Interpretation</label><span class="muted">&mdash;</span>\n      </td>
-      <td>\n        <label class="sr-only">Issues / Problems</label><span class="muted">&mdash;</span>\n      </td>
-      <td>\n        <label class="sr-only">Facilitating Factors</label><span class="muted">&mdash;</span>\n      </td>
-      <td>\n        <label class="sr-only">Agreements</label><span class="muted">&mdash;</span>\n      </td>
-      <td>
-        <label class="delete-btn tooltip" data-tooltip="Remove this activity" aria-label="Remove this activity">
-          <input type="checkbox" 
-                 name="${prefix}-${currentTotal}-DELETE" 
-                 id="id_${prefix}-${currentTotal}-DELETE"
-                 aria-label="Remove this activity">
-          <span aria-hidden="true">&times;</span>
-          <span class="delete-text">Delete</span>
-        </label>
-      </td>
-    `;
-
-    // Remove any narrative placeholders accidentally included in the base row
-    Array.from(newRow.querySelectorAll('label.sr-only')).forEach(function(lbl){
-      const td = lbl.closest('td');
-      if (td && td.parentElement === newRow) { td.remove(); }
+    const first = div.querySelector('input[type="text"]'); if (first) setTimeout(() => first.focus(), 50);
+    const sp = div.querySelector('.save-project-btn');
+    if (sp) sp.addEventListener('click', function() {
+      const form = byId('submission-form'); if (!form) return;
+      const nextTabInput = byId('id_next_tab'); const autosaveInput = byId('id_autosave');
+      if (nextTabInput) nextTabInput.value = 'projects';
+      if (autosaveInput) autosaveInput.value = '1';
+      try { sessionStorage.setItem('project_quicksave_toast', 'Project saved'); } catch (e) {}
+      form.submit();
     });
-
-    // Ensure Action cell uses a real button + hidden DELETE field
-    const actionCell = newRow.querySelector('td:last-child');
-    if (actionCell) {
-      const deleteName = `${prefix}-${currentTotal}-DELETE`;
-      actionCell.innerHTML = `
-        <input type="checkbox" name="${deleteName}" id="id_${deleteName}" style="display:none" aria-label="Remove this activity">
-        <button type="button" class="btn btn--danger btn--small activity-delete-btn" aria-label="Remove this activity">Delete</button>
-      `;
-    }
-
-    // Build details row that holds narrative inputs
-    const detailsRow = document.createElement('tr');
-    detailsRow.className = 'activity-details';
-    detailsRow.setAttribute('data-project-id', projectId);
-    detailsRow.setAttribute('data-activity-index', currentTotal);
-    const number = tbody.querySelectorAll('.activity-row').length + 1;
-    detailsRow.innerHTML = `
-      <td colspan="8">
-        <div class="activity-number"><span class="section-number">${number}</span><span class="label">Activity</span></div>
-        <div class="details-heading">Details</div>
-        <div class="activity-details-grid">
-          <div class="details-field"><label class="form-label">Interpretation</label><textarea name="${prefix}-${currentTotal}-interpretation" id="id_${prefix}-${currentTotal}-interpretation" class="table-input table-textarea" rows="4" placeholder="Enter interpretation..."></textarea></div>
-          <div class="details-field"><label class="form-label">Issues / Problems</label><textarea name="${prefix}-${currentTotal}-issues_unaddressed" id="id_${prefix}-${currentTotal}-issues_unaddressed" class="table-input table-textarea" rows="4" placeholder="Enter issues..."></textarea></div>
-          <div class="details-field"><label class="form-label">Facilitating Factors</label><textarea name="${prefix}-${currentTotal}-facilitating_factors" id="id_${prefix}-${currentTotal}-facilitating_factors" class="table-input table-textarea" rows="4" placeholder="Enter facilitating factors..."></textarea></div>
-          <div class="details-field"><label class="form-label">Agreements</label><textarea name="${prefix}-${currentTotal}-agreements" id="id_${prefix}-${currentTotal}-agreements" class="table-input table-textarea" rows="4" placeholder="Enter agreements..."></textarea></div>
-        </div>
-      </td>`;
-    
-    // Add a compact subheader before this activity if there are existing rows
-    const hasExisting = tbody.querySelectorAll('.activity-row').length > 0;
-    if (hasExisting) {
-      const subHeader = document.createElement('tr');
-      subHeader.className = 'activity-subheader';
-      subHeader.innerHTML = `
-        <td class="col-activity">Activities</td>
-        <td class="col-output">Output<br><small class="text-muted">Target</small></td>
-        <td class="col-output">Output<br><small class="text-muted">Actual</small></td>
-        <td class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></td>
-        <td class="col-timeframe">Timeframe<br><small class="text-muted">Actual</small></td>
-        <td class="col-budget">Budget<br><small class="text-muted">Target</small></td>
-        <td class="col-budget">Budget<br><small class="text-muted">Actual</small></td>
-        <td class="col-action">Action</td>`;
-      tbody.appendChild(subHeader);
-    }
-
-    // Add the new rows (base + details)
-    tbody.appendChild(newRow);
-    if (newRow.nextSibling) { tbody.insertBefore(detailsRow, newRow.nextSibling); } else { tbody.appendChild(detailsRow); }
-    
-    // Increment TOTAL_FORMS
-    totalFormsInput.value = currentTotal + 1;
-    
-    // Reattach delete handlers (checkbox + button)
-    attachActivityDeleteHandlers();
-    
-    // Focus the first input in the new row
-    const firstInput = newRow.querySelector('textarea, input:not([type="hidden"])');
-    if (firstInput) {
-      setTimeout(() => firstInput.focus(), 100);
-    }
-
-    // No toggles — details are always below
-    
-  };
-
-/**
- * Attach delete handlers to activity rows
- */
-function attachActivityDeleteHandlers() {
-  const deleteCheckboxes = document.querySelectorAll('.activity-row input[name*="DELETE"]');
-  deleteCheckboxes.forEach(function(checkbox) {
-    checkbox.removeEventListener('click', handleActivityDelete);
-    checkbox.addEventListener('click', handleActivityDelete);
-  });
-  const deleteButtons = document.querySelectorAll('.activity-row .activity-delete-btn');
-  deleteButtons.forEach(function(btn){
-    btn.removeEventListener('click', handleActivityDeleteButtonClick);
-    btn.addEventListener('click', handleActivityDeleteButtonClick);
-  });
-}
-// Clean renumber function (replaces corrupted merge block)
-function renumberActivities(tbody) {
-  if (!tbody) return;
-  const detailRows = tbody.querySelectorAll('.activity-details');
-  let n = 1;
-  detailRows.forEach(dr => {
-    const badge = dr.querySelector('.activity-number .section-number');
-    if (badge) { badge.textContent = String(n); }
-    n += 1;
-  });
-}
-function getActivityDeleteBin(form) {
-  let bin = form.querySelector('#activity-delete-bin');
-  if (!bin) {
-    bin = document.createElement('div');
-    bin.id = 'activity-delete-bin';
-    bin.style.display = 'none';
-    form.appendChild(bin);
   }
-  return bin;
-}
 
-/** Handle activity deletion */
-function handleActivityDelete(e) {
+  // ---------------- Activities ----------------
+  const activityDeleteState = new WeakMap();
+
+  function renumberActivities(tbody) {
+    // Renumber repeated headers: Activity 1..N in document order
+    const headers = Array.from(tbody.querySelectorAll('tr.activity-repeated-header .section-number'));
+    headers.forEach((el, idx) => { el.textContent = String(idx + 1); });
+  }
+
+  function updateActivitiesHeaderVisibility(tbody) {
+    if (!tbody) return;
+    const table = tbody.closest('table');
+    const thead = table ? table.querySelector('thead') : null;
+    const count = tbody.querySelectorAll('.activity-row').length;
+    // Always hide thead when using repeated headers
+    if (thead) thead.style.display = 'none';
+    const pid = tbody.getAttribute('data-project-id');
+    if (pid) {
+      const empty = document.querySelector(`.activities-empty[data-project-id="${pid}"]`);
+      if (empty) empty.style.display = count > 0 ? 'none' : 'block';
+    }
+  }
+
+  // Remove any orphan separators that can be left behind after deletes
+  function cleanActivitySubheaders(tbody) {
+    if (!tbody) return;
+    const rows = Array.from(tbody.children);
+    rows.forEach((tr) => {
+      if (tr.classList && tr.classList.contains('activity-repeated-header')) {
+        // valid only when directly followed by an activity-row
+        const next = tr.nextElementSibling;
+        if (!next || !next.classList || !next.classList.contains('activity-row')) {
+          tr.remove();
+        }
+      }
+    });
+  }
+
+  function getActivityDeleteBin(form) {
+    let bin = form.querySelector('#activity-delete-bin');
+    if (!bin) { bin = document.createElement('div'); bin.id='activity-delete-bin'; bin.style.display='none'; form.appendChild(bin); }
+    return bin;
+  }
+
+  function handleActivityDelete(e) {
+    console.log('DIAGNOSTIC: handleActivityDelete called', e);
   const checkbox = e.target;
   const row = checkbox.closest('tr');
-  if (!row) { return; }
-  const tbody = row.parentElement;
-  if (!tbody) { return; }
-  const form = tbody.closest('form');
-  if (!form) { return; }
-
-  const restoreState = activityDeleteState.get(row);
-
-  const restoreRow = () => {
-    const state = activityDeleteState.get(row);
-    if (!state) { return; }
-    const { placeholder, bin, detailsRow, subHeader } = state;
-    checkbox.checked = false;
-
-    if (placeholder.parentNode) {
-      if (subHeader) { placeholder.parentNode.insertBefore(subHeader, placeholder); }
-      placeholder.parentNode.insertBefore(row, placeholder);
-      if (detailsRow) {
-        if (row.nextSibling) {
-          placeholder.parentNode.insertBefore(detailsRow, row.nextSibling);
-        } else {
-          placeholder.parentNode.appendChild(detailsRow);
-        }
-      }
-      placeholder.remove();
-    }
-    if (bin.contains(row)) { bin.removeChild(row); }
-    if (detailsRow && bin.contains(detailsRow)) { bin.removeChild(detailsRow); }
-    if (subHeader && bin.contains(subHeader)) { bin.removeChild(subHeader); }
-
-    row.classList.remove('marked-for-deletion');
-    row.style.display = '';
-    activityDeleteState.delete(row);
-    try { renumberActivities(tbody); } catch (e) { /* noop */ }
-  };
-
-  if (checkbox.checked) {
-    if (confirm('Are you sure you want to remove this activity?')) {
-      const hiddenIdInput = row.querySelector('input[name*="-id"]');
-      const maybeDetails = row.nextElementSibling && row.nextElementSibling.classList.contains('activity-details') ? row.nextElementSibling : null;
-      const maybeSubheader = row.previousElementSibling && row.previousElementSibling.classList.contains('activity-subheader') ? row.previousElementSibling : null;
-      if (!hiddenIdInput || !hiddenIdInput.value) {
-        if (maybeDetails) maybeDetails.remove();
-        if (maybeSubheader) maybeSubheader.remove();
-        row.remove();
-        try { renumberActivities(tbody); } catch (e) { /* noop */ }
-      } else {
-        const bin = getActivityDeleteBin(form);
-        const nextSibling = row.nextSibling;
-        const placeholder = document.createElement('tr');
-        placeholder.className = 'activity-row-placeholder';
-        const colCount = row.querySelectorAll('td').length || 12;
-        placeholder.innerHTML = `<td colspan="${colCount}" style="padding: 0.75rem; background: #fef2f2; color: #b91c1c; font-size: 0.9rem; border: 1px solid #fecaca;"><span style="margin-right: 1rem;">Activity marked for removal.</span><button type="button" class="undo-remove" style="background: none; border: none; color: #2563eb; cursor: pointer; text-decoration: underline; padding: 0;">Undo</button></td>`;
-        if (nextSibling) { tbody.insertBefore(placeholder, nextSibling); } else { tbody.appendChild(placeholder); }
-        bin.appendChild(row);
-        if (maybeDetails) bin.appendChild(maybeDetails);
-        if (maybeSubheader) bin.appendChild(maybeSubheader);
-        row.classList.add('marked-for-deletion');
-        row.style.display = '';
-        activityDeleteState.set(row, { placeholder, bin, detailsRow: maybeDetails, subHeader: maybeSubheader, nextSibling });
-        const undoButton = placeholder.querySelector('.undo-remove');
-        if (undoButton) undoButton.addEventListener('click', restoreRow, { once: true });
-        try { renumberActivities(tbody); } catch (e) { /* noop */ }
-      }
-    } else {
-      checkbox.checked = false;
-    }
-  } else {
-    if (restoreState) { restoreRow(); }
-  }
-}
-
-/** Button wrapper for DELETE logic */
-function handleActivityDeleteButtonClick(e) {
-  const row = e.target.closest('tr');
   if (!row) return;
-  const checkbox = row.querySelector('input[name*="-DELETE"]');
-  if (!checkbox) return;
-  checkbox.checked = true;
-  handleActivityDelete({ target: checkbox });
-}
+  const tbody = row.parentElement;
+  const form = tbody.closest('form');
+  if (!form) return;
+  const maybeDetails = row.nextElementSibling && row.nextElementSibling.classList.contains('activity-details') ? row.nextElementSibling : null;
+  const maybeSubheader = row.previousElementSibling && row.previousElementSibling.classList.contains('activity-repeated-header') ? row.previousElementSibling : null;
 
-// Initialize projects and activities when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initProjectsAndActivities);
-} else {
-  initProjectsAndActivities();
-}function initEnhancedProjectsTable() {
-  initTextCellInteractions();
-  initProjectsToolbar();
-  autosizeAllProjectTextareas();
-  initTableInputValidation();
-  try { initResponsiveTableBehavior(); } catch (e) { /* noop */ }
-}
-
-/** Toolbar handlers for Projects table */
-function initProjectsToolbar() {
-  document.querySelectorAll('.projects-table-container').forEach(container => {
-    const table = container.querySelector('.projects-table');
-    const toolbar = container.querySelector('.projects-toolbar');
-    if (!table || !toolbar) return;
-    toolbar.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-projects-action]');
-      if (!btn) return;
-      const action = btn.getAttribute('data-projects-action');
-      if (action === 'expand') {
-        table.classList.add('expanded');
-        autosizeAllProjectTextareas();
-      } else if (action === 'collapse') {
-        table.classList.remove('expanded');
-      } else if (action === 'wrap') {
-        table.classList.toggle('wrap');
-        autosizeAllProjectTextareas();
-      }
-    });
-  });
-}
-
-function autosizeAllProjectTextareas() {
-  document.querySelectorAll('.projects-table textarea').forEach(ta => autosizeTextarea(ta));
-}
-
-function autosizeTextarea(ta) {
-  if (!ta) return;
-  ta.style.height = 'auto';
-  ta.style.height = (ta.scrollHeight + 2) + 'px';
-}
-
-// Autosize on input within project tables
-document.addEventListener('input', function(e){
-  if (e.target && e.target.closest && e.target.closest('.projects-table') && e.target.tagName === 'TEXTAREA') {
-    autosizeTextarea(e.target);
+  // Robustly find the hidden id input for this activity
+  let idInput = row.querySelector('input[type="hidden"][name$="-id"]');
+  if (!idInput && maybeDetails) {
+    idInput = maybeDetails.querySelector('input[type="hidden"][name$="-id"]');
   }
-});
-
-/** Handle text cell expand/collapse interactions */
-function initTextCellInteractions() {
-  document.addEventListener('click', function(e) {
-    const textTruncated = e.target.closest('.text-truncated');
-    if (textTruncated) {
-      const textCell = textTruncated.closest('.text-cell');
-      if (textCell) {
-        textCell.classList.toggle('expanded');
-        if (textCell.classList.contains('expanded')) {
-          const textarea = textCell.querySelector('textarea, input[type="text"]');
-          if (textarea) {
-            setTimeout(() => textarea.focus(), 100);
-          }
-        }
-      }
+  let totalFormsInput = null;
+  let idValue = '';
+  if (idInput && idInput.name) {
+    const prefixMatch = idInput.name.match(/^(activities_\d+)-\d+-id$/);
+    if (prefixMatch) {
+      totalFormsInput = document.querySelector(`input[name="${prefixMatch[1]}-TOTAL_FORMS"]`);
     }
-  });
+    idValue = idInput.value || '';
+  }
+  if (checkbox.checked) {
+    if (!confirm('Are you sure you want to remove this activity?')) { checkbox.checked = false; return; }
+    // Always create hidden DELETE/id inputs for both new and existing rows
+    const anyField = row.querySelector('textarea, input[name*="-"], select[name*="-"]');
+    const nameAttr = anyField ? anyField.getAttribute('name') : '';
+    const m = nameAttr ? nameAttr.match(/^(.+)-(\d+)-/) : null;
+    const prefix = m ? m[1] : '';
+    const idx = m ? m[2] : '';
+    const delName = `${prefix}-${idx}-DELETE`;
+    const idName = `${prefix}-${idx}-id`;
+    // Remove any previous for this index
+    form.querySelectorAll(`input[name="${delName}"]`).forEach(n => n.remove());
+    form.querySelectorAll(`input[name="${idName}"]`).forEach(n => n.remove());
+    // Create hidden DELETE and id inputs (idInput may be empty for new rows)
+    const delInput = document.createElement('input'); delInput.type = 'hidden'; delInput.name = delName; delInput.value = 'on';
+  const idInputCopy = document.createElement('input'); idInputCopy.type = 'hidden'; idInputCopy.name = idName; idInputCopy.value = idValue;
+  form.appendChild(delInput); form.appendChild(idInputCopy);
+    // Remove row and details/subheader from DOM
+    if (maybeDetails) maybeDetails.remove();
+    if (maybeSubheader) maybeSubheader.remove();
+    row.remove();
+    renumberActivities(tbody);
+    updateActivitiesHeaderVisibility(tbody);
+    cleanActivitySubheaders(tbody);
+  } else {
+    // Unhide if un-deleted (should rarely happen)
+    let deleteInput = row.querySelector('input[type="checkbox"][name$="-DELETE"]');
+    if (deleteInput) deleteInput.checked = false;
+    row.style.display = '';
+    if (maybeDetails) maybeDetails.style.display = '';
+    if (maybeSubheader) maybeSubheader.style.display = '';
+  }
+}
 
-  // Close expanded cells when clicking outside
-  document.addEventListener('click', function(e) {
-    const expandedCells = document.querySelectorAll('.text-cell.expanded');
-    expandedCells.forEach(cell => {
-      if (!cell.contains(e.target)) {
-        cell.classList.remove('expanded');
+  function attachActivityDeleteHandlers() {
+    // Attach to checkboxes as before
+    document.querySelectorAll('.activity-row input[name*="-DELETE"]').forEach(cb => {
+      cb.removeEventListener('click', handleActivityDelete);
+      cb.addEventListener('click', handleActivityDelete);
+    });
+    // Use event delegation for delete buttons
+    document.body.removeEventListener('click', delegatedActivityDeleteBtnHandler);
+    document.body.addEventListener('click', delegatedActivityDeleteBtnHandler);
+  }
+
+  function delegatedActivityDeleteBtnHandler(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('activity-delete-btn')) {
+      const row = e.target.closest('tr'); if (!row) return;
+      const cb = row.querySelector('input[name*="-DELETE"]'); if (!cb) return;
+      cb.checked = true; handleActivityDelete({ target: cb });
+    }
+  }
+
+  // Collapse/expand activity base + details by clicking the repeated header
+  function attachActivityHeaderToggles() {
+    document.querySelectorAll('tr.activity-repeated-header').forEach(h => {
+      h.style.cursor = 'pointer';
+      h.addEventListener('click', function(){
+        // Find all rows after this header until the next header or end of tbody
+        let next = h.nextElementSibling;
+        const rowsToToggle = [];
+        while (next && !next.classList.contains('activity-repeated-header')) {
+          rowsToToggle.push(next);
+          next = next.nextElementSibling;
+        }
+        const expanded = h.getAttribute('data-expanded') !== 'false';
+        const icon = h.querySelector('.acc-icon');
+        if (expanded) {
+          rowsToToggle.forEach(row => row.style.display = 'none');
+          h.setAttribute('data-expanded','false');
+          if (icon) icon.textContent = '▸';
+          // Update header title with activity value
+          const base = rowsToToggle.find(row => row.classList.contains('activity-row'));
+          const titleSpan = h.querySelector('.activity-title-text');
+          if (base) {
+            const textarea = base.querySelector('textarea[name$="-activity"]');
+            if (textarea && titleSpan) titleSpan.textContent = textarea.value || '';
+          }
+        } else {
+          rowsToToggle.forEach(row => row.style.display = '');
+          h.setAttribute('data-expanded','true');
+          if (icon) icon.textContent = '▾';
+        }
+      });
+    });
+    // Update header title live as user types
+    document.querySelectorAll('.activity-row textarea[name$="-activity"]').forEach(textarea => {
+      textarea.addEventListener('input', function(){
+        const row = textarea.closest('tr.activity-row');
+        if (!row) return;
+        const header = row.previousElementSibling && row.previousElementSibling.classList.contains('activity-table-headers') ? row.previousElementSibling.previousElementSibling : row.previousElementSibling;
+        if (header && header.classList.contains('activity-repeated-header')) {
+          const titleSpan = header.querySelector('.activity-title-text');
+          if (titleSpan) titleSpan.textContent = textarea.value || '';
+        }
+      });
+    });
+  }
+
+  function addActivityRow(projectId) {
+    if (!projectId || projectId === 'None' || projectId === 'null') { alert('Please save this project first before adding activities.'); return; }
+    const tbody = document.querySelector(`.activity-table-body[data-project-id="${projectId}"]`);
+    if (!tbody) { alert('Cannot add activities to this project. Please refresh and try again.'); return; }
+    let prefix = `activities_${projectId}`;
+    let totalFormsInput = document.querySelector(`input[name="${prefix}-TOTAL_FORMS"]`);
+    if (!totalFormsInput) { totalFormsInput = document.createElement('input'); totalFormsInput.type='hidden'; totalFormsInput.name=`${prefix}-TOTAL_FORMS`; totalFormsInput.value='0'; (tbody.closest('form')||document.body).appendChild(totalFormsInput); }
+    ['INITIAL_FORMS','MIN_NUM_FORMS','MAX_NUM_FORMS'].forEach(s => {
+      if (!document.querySelector(`input[name="${prefix}-${s}"]`)) { const el=document.createElement('input'); el.type='hidden'; el.name=`${prefix}-${s}`; el.value=(s==='MAX_NUM_FORMS'?'1000':'0'); (tbody.closest('form')||document.body).appendChild(el); }
+    });
+    const currentTotal = parseInt(totalFormsInput.value || '0', 10);
+    const base = document.createElement('tr'); base.className='activity-row'; base.setAttribute('data-activity-index', String(currentTotal));
+    base.innerHTML = `
+      <input type="hidden" name="${prefix}-${currentTotal}-id" id="id_${prefix}-${currentTotal}-id">
+      <td><textarea name="${prefix}-${currentTotal}-activity" class="table-input table-textarea" rows="2" placeholder="Enter activity description..."></textarea></td>
+      <td><input type="number" name="${prefix}-${currentTotal}-output_target" class="table-input" min="0" step="1"></td>
+      <td><input type="number" name="${prefix}-${currentTotal}-output_actual" class="table-input" min="0" step="1"></td>
+      <td><input type="date" name="${prefix}-${currentTotal}-timeframe_target" class="table-input table-date"></td>
+      <td><input type="date" name="${prefix}-${currentTotal}-timeframe_actual" class="table-input table-date"></td>
+      <td><input type="number" name="${prefix}-${currentTotal}-budget_target" class="table-input" min="0" step="0.01" placeholder="0.00"></td>
+      <td><input type="number" name="${prefix}-${currentTotal}-budget_actual" class="table-input" min="0" step="0.01" placeholder="0.00"></td>
+      <td>
+        <input type="checkbox" name="${prefix}-${currentTotal}-DELETE" id="id_${prefix}-${currentTotal}-DELETE" style="display:none" aria-label="Remove this activity">
+        <button type="button" class="btn btn--danger btn--small activity-delete-btn" aria-label="Remove this activity">Delete</button>
+      </td>`;
+    const details = document.createElement('tr'); details.className='activity-details'; details.setAttribute('data-project-id', projectId); details.setAttribute('data-activity-index', String(currentTotal));
+    const n = tbody.querySelectorAll('.activity-row').length + 1;
+    details.innerHTML = `
+      <td colspan="8">
+        <div class="activity-details-grid">
+          <div class="details-field"><label class="form-label" for="id_${prefix}-${currentTotal}-interpretation">Interpretation</label><textarea name="${prefix}-${currentTotal}-interpretation" id="id_${prefix}-${currentTotal}-interpretation" class="table-input table-textarea" rows="4" placeholder="Enter interpretation..."></textarea></div>
+          <div class="details-field"><label class="form-label" for="id_${prefix}-${currentTotal}-issues_unaddressed">Issues / Problems</label><textarea name="${prefix}-${currentTotal}-issues_unaddressed" id="id_${prefix}-${currentTotal}-issues_unaddressed" class="table-input table-textarea" rows="4" placeholder="Enter issues..."></textarea></div>
+          <div class="details-field"><label class="form-label" for="id_${prefix}-${currentTotal}-facilitating_factors">Facilitating Factors</label><textarea name="${prefix}-${currentTotal}-facilitating_factors" id="id_${prefix}-${currentTotal}-facilitating_factors" class="table-input table-textarea" rows="4" placeholder="Enter facilitating factors..."></textarea></div>
+          <div class="details-field"><label class="form-label" for="id_${prefix}-${currentTotal}-agreements">Agreements</label><textarea name="${prefix}-${currentTotal}-agreements" id="id_${prefix}-${currentTotal}-agreements" class="table-input table-textarea" rows="4" placeholder="Enter agreements..."></textarea></div>
+        </div>
+      </td>`;
+    // Insert a repeated header before this activity (always)
+    {
+      const sep = document.createElement('tr'); sep.className = 'activity-repeated-header'; sep.setAttribute('data-expanded','true');
+      sep.innerHTML = `<td class="col-activity"><strong><span class="acc-icon" aria-hidden="true">▾</span> Activity <span class="section-number">${n}</span></strong></td><td class="col-output">Output<br><small class="text-muted">Target</small></td><td class="col-output">Output<br><small class="text-muted">Actual</small></td><td class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></td><td class="col-timeframe">Timeframe<br><small class="text-muted">Actual</small></td><td class="col-budget">Budget<br><small class="text-muted">Target</small></td><td class="col-budget">Budget<br><small class="text-muted">Actual</small></td><td class="col-action">Action</td>`;
+      tbody.appendChild(sep);
+    }
+    tbody.appendChild(base); if (base.nextSibling) tbody.insertBefore(details, base.nextSibling); else tbody.appendChild(details);
+    totalFormsInput.value = String(currentTotal + 1);
+    attachActivityDeleteHandlers();
+    attachActivityHeaderToggles();
+    const focusEl = base.querySelector('textarea, input:not([type="hidden"])'); if (focusEl) setTimeout(() => focusEl.focus(), 50);
+    cleanActivitySubheaders(tbody);
+    updateActivitiesHeaderVisibility(tbody);
+  }
+
+  // ---------------- SLP toggle stubs ----------------
+  function toggleGrade(slug) {
+    const el = byId(`grade-${slug}`); if (!el) return;
+    const hidden = el.style.display === 'none' || getComputedStyle(el).display === 'none';
+    el.style.display = hidden ? 'block' : 'none';
+    const header = el.previousElementSibling; const icon = header && header.querySelector ? header.querySelector('.accordion-icon') : null;
+    if (icon) icon.textContent = hidden ? String.fromCharCode(9660) : String.fromCharCode(9654);
+  }
+  function toggleSubject(composite) {
+    const panel = byId(`subject-${composite}`); if (!panel) return;
+    const hidden = panel.style.display === 'none' || getComputedStyle(panel).display === 'none';
+    panel.style.display = hidden ? 'block' : 'none';
+  }
+
+  // ---------------- SLP offered + proficiency validation ----------------
+  function updateProficiencyDisplay(subjectContent) {
+    if (!subjectContent) return;
+    const enrolmentInput = subjectContent.querySelector('input[id$="-enrolment"]');
+    const dnmeInput = subjectContent.querySelector('input[id$="-dnme"]');
+    const fsInput = subjectContent.querySelector('input[id$="-fs"]');
+    const sInput = subjectContent.querySelector('input[id$="-s"]');
+    const vsInput = subjectContent.querySelector('input[id$="-vs"]');
+    const oInput = subjectContent.querySelector('input[id$="-o"]');
+    if (!enrolmentInput) return;
+    const enrolment = parseInt(enrolmentInput.value || '0', 10) || 0;
+    const dnme = parseInt(dnmeInput?.value || '0', 10) || 0;
+    const fs = parseInt(fsInput?.value || '0', 10) || 0;
+    const s = parseInt(sInput?.value || '0', 10) || 0;
+    const vs = parseInt(vsInput?.value || '0', 10) || 0;
+    const o = parseInt(oInput?.value || '0', 10) || 0;
+    const sum = dnme + fs + s + vs + o;
+    const section = subjectContent.querySelector('[data-section="proficiency" ]');
+    const errorContainer = section?.querySelector('.validation-errors');
+    const errorMessages = section?.querySelector('.error-messages');
+    // Try to derive a friendly grade label like "Grade 7" from the header
+    let gradeLabel = 'Grade';
+    const hdr = subjectContent.querySelector('.subject-label');
+    if (hdr && hdr.textContent) {
+      const txt = hdr.textContent.trim();
+      const parts = txt.split(' - '); // e.g., "Grade 7 - Math"
+      if (parts.length > 0) gradeLabel = parts[0];
+    }
+
+    if (enrolment > 0 && sum !== enrolment) {
+      if (errorContainer && errorMessages) {
+        errorContainer.style.display = 'flex';
+        errorMessages.innerHTML = `<div class="message message--error">${gradeLabel} proficiency bands total (${sum}) must equal enrollment (${enrolment})</div>`;
+      }
+      [dnmeInput, fsInput, sInput, vsInput, oInput].forEach(el => el && el.classList.add('error'));
+    } else {
+      if (errorContainer) errorContainer.style.display = 'none';
+      [dnmeInput, fsInput, sInput, vsInput, oInput].forEach(el => el && el.classList.remove('error'));
+    }
+
+    // Compact SLP banner (single card) similar to RMA style
+    try {
+      const mismatch = enrolment > 0 && sum !== enrolment;
+      const existing = subjectContent.querySelector('.slp-validation-banner');
+      if (existing) existing.remove();
+      if (mismatch) {
+        if (errorContainer) errorContainer.style.display = 'none';
+        const banner = document.createElement('div');
+        banner.className = 'validation-errors validation-errors--compact slp-validation-banner';
+        banner.innerHTML = '<div class="error-icon">!</div><div class="error-messages"></div>';
+        banner.querySelector('.error-messages').innerHTML = `<div>${gradeLabel} proficiency bands total (${sum}) must equal enrollment (${enrolment})</div>`;
+        const insertBefore = section || subjectContent.firstElementChild || subjectContent;
+        subjectContent.insertBefore(banner, insertBefore);
+        if (section) section.classList.add('slp-proficiency-error');
+      } else {
+        if (section) section.classList.remove('slp-proficiency-error');
+      }
+    } catch (e) {}
+  }
+
+  function initializeSLPOfferedToggle() {
+    // Work directly with sections rendered by the template
+    document.querySelectorAll('.card-section.proficiency-section').forEach(section => {
+      // The subject content wrapper for this section
+      const subjectContent = section.closest('.subject-content') || section;
+      const offeredCheckbox = section.querySelector('input[id$="-is_offered"]');
+      if (!offeredCheckbox) return;
+      const notOfferedMsg = subjectContent.querySelector('.not-offered-message');
+      const toggleFields = () => {
+        const enabled = offeredCheckbox.checked;
+        // Disable/enable all inputs for this subject except hidden fields and the offered checkbox itself
+        subjectContent.querySelectorAll('input, textarea, select, button').forEach(el => {
+          if (el === offeredCheckbox) return;
+          if (el.type === 'hidden') return;
+          if (el.closest('.offered-checkbox')) return; // leave the control area enabled
+          // Use readOnly for input/textarea to keep values posted, disable buttons/selects
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            try { el.readOnly = !enabled; } catch(e) {}
+          } else {
+            try { el.disabled = !enabled; } catch(e) {}
+          }
+        });
+        // Grey out and show helper message
+        subjectContent.style.opacity = enabled ? '' : '0.6';
+        if (notOfferedMsg) notOfferedMsg.style.display = enabled ? 'none' : 'flex';
+        if (enabled) {
+          updateProficiencyDisplay(subjectContent);
+        } else {
+          const b = subjectContent.querySelector('.slp-validation-banner'); if (b) b.remove();
+          if (section) section.classList.remove('slp-proficiency-error');
+        }
+      };
+      toggleFields();
+      offeredCheckbox.addEventListener('change', toggleFields);
+      // Recompute proficiency as user types
+      subjectContent.querySelectorAll('.proficiency-field input').forEach(inp => {
+        inp.addEventListener('input', () => { updateProficiencyDisplay(subjectContent); });
+      });
+    });
+  }
+
+  // Restore LLC list and reasons selections from hidden storage
+  function initializeSLPCompetenciesAndReasons() {
+    // Competencies paragraph (if empty, inject enumerated placeholders 1-4)
+    document.querySelectorAll('.llc-section').forEach(section => {
+      const ta = section.querySelector('textarea.llc-storage');
+      if (!ta) return;
+      const existing = (ta.value || '').trim();
+      if (!existing) {
+        ta.value = '1. \n2. \n3. \n4. ';
       }
     });
-  });
-
-  // Close expanded cells on Escape key
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      document.querySelectorAll('.text-cell.expanded').forEach(cell => {
-        cell.classList.remove('expanded');
+    // Reasons and Other toggle
+    document.querySelectorAll('.reasons-section').forEach(section => {
+      const hiddenCodes = section.querySelector('input[type="hidden"][name$="-non_mastery_reasons"]');
+      const otherHidden = section.querySelector('textarea[name$="-non_mastery_other"]');
+      const codes = hiddenCodes ? (hiddenCodes.value || '').split(',').filter(Boolean) : [];
+      codes.forEach(code => {
+        const cb = section.querySelector(`input.reason-choice[value="${code}"]`);
+        if (cb) cb.checked = true;
       });
-    }
-  });
-}
-
-/** Enhanced form input validation */
-function initTableInputValidation() {
-  document.addEventListener('input', function(e) {
-    if (e.target.name && (e.target.name.includes('budget') || e.target.name.includes('output'))) {
-      const value = e.target.value.replace(/[^\d.]/g, '');
-      if (e.target.value !== value) { e.target.value = value; }
-      if (value && !isNaN(parseFloat(value))) {
-        e.target.classList.remove('invalid');
-        e.target.classList.add('valid');
-      } else if (value) {
-        e.target.classList.add('invalid');
-        e.target.classList.remove('valid');
-      } else {
-        e.target.classList.remove('invalid', 'valid');
+      const fSelected = codes.includes('f');
+      const otherWrap = section.querySelector('.reason-other');
+      if (otherWrap) otherWrap.style.display = fSelected ? 'block' : 'none';
+      if (fSelected && otherHidden && otherWrap) {
+        const ta = otherWrap.querySelector('textarea');
+        if (ta) ta.value = otherHidden.value || '';
       }
-    }
-  });
+    });
+    // Toggle on change + rebuild interventions table
+    document.body.addEventListener('change', function(e){
+      if (e.target && e.target.classList && e.target.classList.contains('reason-choice')) {
+        const section = e.target.closest('.reasons-section');
+        if (!section) return;
+        const otherWrap = section.querySelector('.reason-other');
+        if (!otherWrap) return;
+        const show = !!section.querySelector('input.reason-choice[value="f"]:checked');
+        otherWrap.style.display = show ? 'block' : 'none';
 
-  // Validate date inputs
-  document.addEventListener('change', function(e) {
-    if (e.target.type === 'date' && e.target.classList.contains('table-date')) {
-      const selectedDate = new Date(e.target.value);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      selectedDate.setHours(0, 0, 0, 0);
-      if (e.target.name.includes('target')) {
-        if (selectedDate >= today) {
-          e.target.classList.add('date-future');
-          e.target.classList.remove('date-past');
-        } else {
-          e.target.classList.add('date-past');
-          e.target.classList.remove('date-future');
-        }
-      } else if (e.target.name.includes('actual')) {
-        if (selectedDate <= today) {
-          e.target.classList.add('date-past');
-          e.target.classList.remove('date-future');
-        } else {
-          e.target.classList.add('date-future');
-          e.target.classList.remove('date-past');
-        }
+        const sc = section.closest('.subject-content');
+        if (sc) rebuildInterventionsFor(sc);
       }
-    }
-  });
-}
+    });
+  }
 
-/** Enhanced responsive table behavior (minimal safe impl) */
-function initResponsiveTableBehavior() {
-  // No-op placeholder to avoid breaking calls; implement as needed
-}function toggleGrade(slug) {
-  try {
-    const container = document.getElementById(`grade-${slug}`);
-    if (!container) return;
-    const isHidden = container.style.display === 'none' || getComputedStyle(container).display === 'none';
-    container.style.display = isHidden ? '' : 'none';
-    const header = container.previousElementSibling;
-    if (header && header.querySelector && header.classList.contains('grade-header')) {
-      const icon = header.querySelector('.accordion-icon');
-      if (icon) { icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)'; }
-    }
-  } catch (e) { /* noop */ }
-}
+  // Build the interventions table from selected reasons; prefill from saved JSON if available
+  function rebuildInterventionsFor(subjectContent) {
+    const plan = subjectContent.querySelector('.interventions-plan');
+    if (!plan) return;
+  const pairsWrap = plan.querySelector('.interventions-pairs');
+    const storage = plan.querySelector('textarea.interventions-storage');
+    let saved = [];
+    try { saved = storage && storage.value ? JSON.parse(storage.value) : []; } catch (e) { saved = []; }
 
-function toggleSubject(composite) {
-  try {
-    const panel = document.getElementById(`subject-${composite}`);
-    if (!panel) return;
-    const isHidden = panel.style.display === 'none' || getComputedStyle(panel).display === 'none';
-    panel.style.display = isHidden ? '' : 'none';
-    const header = panel.previousElementSibling;
-    if (header && header.querySelector) {
-      const icon = header.querySelector('.accordion-icon');
-      if (icon) { icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)'; }
-    }
-  } catch (e) { /* noop */ }
-}
-
-// ============================================
-// CROSS-TAB ENROLLMENT VALIDATION
-// ============================================
-
-// Get SLP enrollment data as the source of truth
-function getSLPEnrollmentData() {
-  const slpData = {};
-  
-  // down or right arrow
-  document.querySelectorAll('input[id*="slp_rows"][id$="-enrolment"]').forEach(input => {
-    const value = parseInt(input.value) || 0;
-    if (value > 0) {
-      // Extract grade from the input ID pattern: id_slp_rows-0-grade_7-filipino-enrolment
-      const match = input.id.match(/slp_rows-\d+-(grade_\d+|kinder)-[^-]+-enrolment/);
-      if (match) {
-        let gradePart = match[1]; // down or right arrow
-        let gradeName;
-        
-        if (gradePart === 'kinder') {
-          gradeName = 'Kinder';
-        } else {
-          // Convert "grade_7" to "Grade 7"
-          gradeName = gradePart.replace('grade_', 'Grade ');
-        }
-        
-        // down or right arrow
-        if (!slpData[gradeName]) {
-          slpData[gradeName] = value;
-        }
+    // Collect selected reasons; substitute 'Other' text when present
+    const selected = Array.from(subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => {
+      const labelSpan = cb.closest('label') && cb.closest('label').querySelector('span');
+      let label = labelSpan ? labelSpan.textContent.trim() : (cb.closest('label') ? cb.closest('label').textContent.trim() : cb.value);
+      if (cb.value === 'f') {
+        const otherTa = subjectContent.querySelector('.reasons-section .reason-other textarea');
+        if (otherTa && otherTa.value.trim()) label = otherTa.value.trim();
       }
-    }
-  });
-  
-  return slpData;
-}
+      return { code: cb.value, reason: label };
+    });
 
-// Validate RMA tab proficiency bands consistency
-function validateRMAEnrollment() {
-  const errors = [];
-  
-  // Check each RMA row - only validate proficiency bands sum
-  document.querySelectorAll('input[id*="rma_rows"][id$="-enrolment"]').forEach(enrollmentInput => {
-    const row = enrollmentInput.closest('tr');
-    if (!row) {
+    // Clear current UI
+    if (pairsWrap) { pairsWrap.innerHTML = ''; }
+
+    if (!selected.length) {
+      if (pairsWrap) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.gridColumn = '1 / span 2';
+        emptyMsg.style.color = '#6b7280';
+        emptyMsg.textContent = 'No reasons selected.';
+        pairsWrap.appendChild(emptyMsg);
+      }
       return;
     }
-    const gradeCell = row.querySelector('td:first-child');
-    
-    if (enrollmentInput && gradeCell) {
-      const rmaEnrollment = parseInt(enrollmentInput.value) || 0;
-      const grade = gradeCell.textContent.trim();
-      
-      // Check proficiency bands sum if enrollment > 0
-      if (rmaEnrollment > 0) {
-        const proficiencyInputs = row.querySelectorAll('input[id$="-emerging_not_proficient"], input[id$="-emerging_low_proficient"], input[id$="-developing_nearly_proficient"], input[id$="-transitioning_proficient"], input[id$="-at_grade_level"]');
-        const proficiencySum = Array.from(proficiencyInputs).reduce((sum, input) => sum + (parseInt(input.value) || 0), 0);
-        
-        if (proficiencySum !== rmaEnrollment) {
-          errors.push({
-            element: row,
-            message: `${grade} proficiency bands total (${proficiencySum}) must equal enrollment (${rmaEnrollment})`,
-            type: 'proficiency_sum_mismatch'
-          });
+
+    // Build numbered reasons and matching textareas
+    selected.forEach((item, idx) => {
+      if (!pairsWrap) return;
+      const reasonDiv = document.createElement('div');
+      reasonDiv.className = 'intervention-reason';
+      reasonDiv.setAttribute('data-number', String(idx + 1));
+      const numberSpan = document.createElement('span');
+      numberSpan.className = 'intervention-reason-number';
+      numberSpan.textContent = `${idx + 1}.`;
+      const textSpan = document.createElement('span');
+      textSpan.textContent = item.reason;
+      reasonDiv.appendChild(numberSpan);
+      reasonDiv.appendChild(textSpan);
+      const ta = document.createElement('textarea');
+      ta.className = 'form-textarea intervention-textarea';
+      ta.rows = 2;
+      ta.placeholder = 'Example: Conduct LAC on teaching the difficult-to-teach competencies';
+      ta.setAttribute('data-reason-code', item.code);
+      const match = saved.find(s => s.code === item.code);
+      if (match && match.intervention) ta.value = match.intervention;
+      pairsWrap.appendChild(reasonDiv);
+      pairsWrap.appendChild(ta);
+    });
+  }
+
+  function initializeSLPNestedAccordion() {
+    // Recompute on load for all visible subject contents
+    document.querySelectorAll('.subject-content').forEach(sc => { 
+      updateProficiencyDisplay(sc);
+      rebuildInterventionsFor(sc);
+    });
+  }
+
+  // Initialize Reading Difficulties builder from hidden JSON
+  function initializeReadingDifficulties() {
+    const storage = document.querySelector('.reading-difficulties-storage');
+    if (!storage) return;
+    let saved = [];
+    try { saved = storage.value ? JSON.parse(storage.value) : []; } catch(e) { saved = []; }
+    saved.forEach(entry => {
+      const gradeEl = document.querySelector(`.reading-difficulty-grade[data-grade="${entry.grade}"]`);
+      if (!gradeEl) return;
+      const pairs = entry.pairs || [];
+      pairs.forEach((pair, idx) => {
+        const pairEl = gradeEl.querySelectorAll('.reading-difficulty-pair')[idx];
+        if (!pairEl) return;
+        const diffTa = pairEl.querySelector('textarea.reading-difficulty-textarea');
+        const intTa = pairEl.querySelector('textarea.reading-intervention-textarea');
+        if (diffTa) diffTa.value = pair.difficulty || '';
+        if (intTa) intTa.value = pair.intervention || '';
+      });
+    });
+  }
+
+  // Track which SLP subject is being saved so the server can resolve it
+  function wireSLPSaveSubject() {
+    const form = document.getElementById('submission-form');
+    if (!form) return;
+    const subjectIdInput = document.getElementById('id_current_subject_id');
+    const subjectPrefixInput = document.getElementById('id_current_subject_prefix');
+    const subjectIndexInput = document.getElementById('id_current_subject_index');
+
+    function inferFromSection(btn) {
+      const section = btn.closest('.subject-content') || btn.closest('.card-section');
+      if (!section) return;
+      const probe = section.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+      const ref = probe ? (probe.id || probe.name || '') : '';
+      const mPrefix = ref.match(/(slp_rows-\d+)/);
+      const mIndex = ref.match(/slp_rows-(\d+)/);
+      if (mPrefix && subjectPrefixInput) subjectPrefixInput.value = mPrefix[1];
+      if (mIndex && subjectIndexInput) subjectIndexInput.value = mIndex[1];
+    }
+
+    document.querySelectorAll('.save-subject-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (subjectIdInput) subjectIdInput.value = this.dataset.subjectId || subjectIdInput.value || '';
+        if (subjectPrefixInput) subjectPrefixInput.value = this.dataset.subjectPrefix || subjectPrefixInput.value || '';
+        if (subjectIndexInput) subjectIndexInput.value = this.dataset.subjectIndex || subjectIndexInput.value || '';
+        if ((!subjectPrefixInput?.value || !subjectIndexInput?.value)) {
+          inferFromSection(this);
+        }
+      });
+    });
+
+    document.querySelectorAll('button[name="action"][value="save_draft"]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (subjectIdInput) subjectIdInput.value = '';
+        if (subjectPrefixInput) subjectPrefixInput.value = '';
+        if (subjectIndexInput) subjectIndexInput.value = '';
+      });
+    });
+  }
+  // ---------------- Cross-tab validation (Reading/RMA) ----------------
+  function getSLPEnrollmentData() {
+    const slpData = {};
+    document.querySelectorAll('input[id*="slp_rows"][id$="-enrolment"]').forEach(input => {
+      const value = parseInt(input.value || '0', 10) || 0;
+      if (value > 0) {
+        const m = input.id.match(/slp_rows-\d+-(grade_\d+|kinder)-[^-]+-enrolment/);
+        if (m) {
+          const gradePart = m[1];
+          const gradeName = gradePart === 'kinder' ? 'Kinder' : gradePart.replace('grade_', 'Grade ');
+          if (!slpData[gradeName]) slpData[gradeName] = value;
         }
       }
-    }
-  });
-  
-  return errors;
-}
+    });
+    return slpData;
+  }
 
-// Validate Reading assessments total against SLP enrollment (Reading has no enrollment inputs)
-function validateReadingEnrollment() {
-  const slpData = getSLPEnrollmentData();
-  const errors = [];
-  
-  // Only validate if we have SLP data to compare against
-  if (Object.keys(slpData).length === 0) {
+  function validateRMAEnrollment() {
+    const errors = [];
+    document.querySelectorAll('input[id*="rma_rows"][id$="-enrolment"]').forEach(enrollmentInput => {
+      const row = enrollmentInput.closest('tr'); if (!row) return;
+      const gradeCell = row.querySelector('td:first-child');
+      const rmaEnrollment = parseInt(enrollmentInput.value || '0', 10) || 0;
+      const grade = gradeCell ? gradeCell.textContent.trim() : 'Grade';
+      if (rmaEnrollment > 0) {
+        const profInputs = row.querySelectorAll('input[id$="-emerging_not_proficient"], input[id$="-emerging_low_proficient"], input[id$="-developing_nearly_proficient"], input[id$="-transitioning_proficient"], input[id$="-at_grade_level"]');
+        const sum = Array.from(profInputs).reduce((a, inp) => a + (parseInt(inp.value || '0', 10) || 0), 0);
+        if (sum !== rmaEnrollment) {
+          errors.push({ element: row, message: `${grade} proficiency bands total (${sum}) must equal enrollment (${rmaEnrollment})` });
+        }
+      }
+    });
     return errors;
   }
-  
-  
-  // down or right arrow
-  const gradeMap = {
-    '1': 'Grade 1', '2': 'Grade 2', '3': 'Grade 3', '4': 'Grade 4', '5': 'Grade 5',
-    '6': 'Grade 6', '7': 'Grade 7', '8': 'Grade 8', '9': 'Grade 9', '10': 'Grade 10'
-  };
-  
-  // Validate CRLA assessments (Grades 1-3) - sum across all proficiency levels
-  const crlaGradeTotals = {}; 
-  
-  document.querySelectorAll('input[id*="reading_crla_new"]').forEach(input => {
-    const match = input.id.match(/_(mt|fil|eng)_grade_(\d+)/);
-    if (match) {
-      const gradeNum = match[2];
+
+  function validateReadingEnrollment() {
+    const slpData = getSLPEnrollmentData();
+    if (Object.keys(slpData).length === 0) return [];
+    const errors = [];
+    const gradeMap = { '1':'Grade 1','2':'Grade 2','3':'Grade 3','4':'Grade 4','5':'Grade 5','6':'Grade 6','7':'Grade 7','8':'Grade 8','9':'Grade 9','10':'Grade 10' };
+    const crlaTotals = {};
+    document.querySelectorAll('input[id*="reading_crla_new"]').forEach(input => {
+      const m = input.id.match(/_(mt|fil|eng)_grade_(\d+)/);
+      if (!m) return; const gradeNum = m[2];
       const gradeName = gradeMap[gradeNum];
-      const value = parseInt(input.value) || 0;
-      
-      if (!crlaGradeTotals[gradeName]) {
-        crlaGradeTotals[gradeName] = 0;
+      const value = parseInt(input.value || '0', 10) || 0;
+      crlaTotals[gradeName] = (crlaTotals[gradeName] || 0) + value;
+    });
+    Object.keys(crlaTotals).forEach(grade => {
+      if (slpData[grade] && crlaTotals[grade] !== slpData[grade]) {
+        errors.push({ message: `${grade} reading totals (${crlaTotals[grade]}) must equal SLP enrollment (${slpData[grade]})` });
       }
-      crlaGradeTotals[gradeName] += value;
-    }
-  });
-  
-  const crlaSection = (() => {
-    const input = document.querySelector('input[id*="reading_crla_new"]');
-    return input ? input.closest('.section-card') : null;
-  })();
+    });
+    return errors;
+  }
 
-  // Check CRLA totals against SLP enrollment
-  Object.keys(crlaGradeTotals).forEach(grade => {
-    const readingTotal = crlaGradeTotals[grade];
-    const slpEnrollment = slpData[grade] || 0;
-    
-    if (readingTotal > 0 && slpEnrollment > 0 && readingTotal !== slpEnrollment) {
-      errors.push({
-        element: crlaSection,
-        message: `${grade} CRLA total (${readingTotal}) must match SLP enrollment (${slpEnrollment})`,
-        type: 'crla_enrollment_mismatch'
-      });
-    }
-  });
-  
-  // Validate PHILIRI assessments (Grades 4-10) - sum across all proficiency levels
-  const philiriGradeTotals = {};
-  
-  document.querySelectorAll('input[id*="reading_philiri_new"]').forEach(input => {
-    const match = input.id.match(/_(eng|fil)_grade_(\d+)/);
-    if (match) {
-      const gradeNum = match[2];
-      const gradeName = gradeMap[gradeNum];
-      const value = parseInt(input.value) || 0;
-      
-      if (!philiriGradeTotals[gradeName]) {
-        philiriGradeTotals[gradeName] = 0;
+  function validateCurrentTab() {
+    const qs = new URLSearchParams(window.location.search);
+    const tab = qs.get('tab');
+    if (tab === 'rma') return validateRMAEnrollment();
+    if (tab === 'reading') return validateReadingEnrollment();
+    return [];
+  }
+
+  // Lightweight visual indicators for RMA/Reading validation
+  function wireRMAVerification() {
+    const redraw = () => {
+      // Clear previous outline and any prior banner
+      document.querySelectorAll('tr.row-error').forEach(tr => { tr.classList.remove('row-error'); tr.style.outline = ''; tr.title = ''; });
+      const oldBanner = document.querySelector('.rma-validation-banner'); if (oldBanner) oldBanner.remove();
+
+      const errs = validateRMAEnrollment();
+      // Outline rows in error (no inline messages)
+      errs.forEach(e => { if (e.element) { e.element.classList.add('row-error'); e.element.style.outline = '2px solid #ef4444'; e.element.title = e.message; } });
+
+      // Single, slim banner above the RMA table
+      if (errs.length > 0) {
+        const banner = document.createElement('div');
+        banner.className = 'validation-errors validation-errors--compact rma-validation-banner';
+        banner.innerHTML = '<div class="error-icon">!</div><div class="error-messages"></div>';
+        banner.querySelector('.error-messages').innerHTML = `<div>${errs[0].message}</div>`;
+        const host = document.querySelector('.data-table-wrapper');
+        if (host && host.parentNode) host.parentNode.insertBefore(banner, host);
       }
-      philiriGradeTotals[gradeName] += value;
-    }
-  });
-  
-  const philiriSection = (() => {
-    const input = document.querySelector('input[id*="reading_philiri_new"]');
-    return input ? input.closest('.section-card') : null;
-  })();
+    };
+    document.querySelectorAll('input[id*="rma_rows"]').forEach(inp => {
+      inp.addEventListener('input', redraw);
+      inp.addEventListener('change', redraw);
+    });
+    redraw();
+  }
 
-  // Check PHILIRI totals against SLP enrollment
-  Object.keys(philiriGradeTotals).forEach(grade => {
-    const readingTotal = philiriGradeTotals[grade];
-    const slpEnrollment = slpData[grade] || 0;
-    
-    if (readingTotal > 0 && slpEnrollment > 0 && readingTotal !== slpEnrollment) {
-      errors.push({
-        element: philiriSection,
-        message: `${grade} PHILIRI total (${readingTotal}) must match SLP enrollment (${slpEnrollment})`,
-        type: 'philiri_enrollment_mismatch'
+  function wireReadingVerification() {
+    const redraw = () => {
+      const errs = validateReadingEnrollment();
+      // For now, just log and optionally show one toast-like banner
+      const old = document.querySelector('.reading-crosscheck'); if (old) old.remove();
+      if (errs.length > 0) {
+        const banner = document.createElement('div');
+        banner.className = 'reading-crosscheck';
+        banner.style.cssText = 'margin:.5rem 0;padding:.5rem 1rem;border:1px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:.5rem;';
+        banner.textContent = errs[0].message;
+        // Insert above the first reading section if found
+        const host = document.querySelector('[data-tab="reading"], .assessment-section') || document.querySelector('.submission-shell');
+        if (host && host.parentNode) host.parentNode.insertBefore(banner, host);
+      }
+      // Recompute CRLA totals in the matrix
+      computeCRLATotals();
+    };
+    document.querySelectorAll('input[id*="reading_crla_new"], input[id*="reading_philiri"]').forEach(inp => {
+      inp.addEventListener('input', redraw);
+      inp.addEventListener('change', redraw);
+    });
+    redraw();
+  }
+
+  // ---------------- Reading totals (CRLA + PHILIRI) ----------------
+  function readNumber(el) {
+    const v = parseFloat(el && el.value ? el.value : '0');
+    return Number.isFinite(v) ? v : 0;
+  }
+  function sumInputsInRow(row) {
+    let total = 0;
+    row.querySelectorAll('input[type="number"]').forEach(inp => { total += readNumber(inp); });
+    return total;
+  }
+  function computeCRLATotals() {
+    // Handle CRLA tables (mt/fil/eng for Grades 1-3)
+    document.querySelectorAll('.reading-matrix-table').forEach(table => {
+      try {
+        const tbody = table.tBodies && table.tBodies[0] ? table.tBodies[0] : table.querySelector('tbody');
+        if (!tbody) return;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        let grand = 0;
+        rows.forEach(tr => {
+          if (tr.classList.contains('total-row')) return;
+          const totalSpan = tr.querySelector('.total-cell .total-value');
+          if (!totalSpan) return;
+          const rowTotal = sumInputsInRow(tr);
+          totalSpan.textContent = String(rowTotal);
+          grand += rowTotal;
+        });
+        // Grand total (CRLA uses data-grand-total without key)
+        const grandSpan = table.querySelector('.grand-total [data-grand-total], [data-grand-total]:not([data-grand-total=""])');
+        if (grandSpan && !grandSpan.getAttribute('data-grand-total')) {
+          grandSpan.textContent = String(grand);
+        }
+      } catch (e) { /* ignore */ }
+    });
+
+    // Handle PHILIRI (elem/junior) where totals are keyed by data-total="eng-elem" etc.
+    // Elementary
+    document.querySelectorAll('.reading-matrix-table').forEach(table => {
+      try {
+        const elemEng = table.querySelector('[data-total="eng-elem"]');
+        const elemFil = table.querySelector('[data-total="fil-elem"]');
+        const jrEng = table.querySelector('[data-total="eng-junior"]');
+        const jrFil = table.querySelector('[data-total="fil-junior"]');
+        // Elementary
+        if (elemEng || elemFil) {
+          let engSum = 0, filSum = 0;
+          const engRow = elemEng ? elemEng.closest('tr') : null;
+          const filRow = elemFil ? elemFil.closest('tr') : null;
+          if (engRow) engSum = sumInputsInRow(engRow);
+          if (filRow) filSum = sumInputsInRow(filRow);
+          if (elemEng) elemEng.textContent = String(engSum);
+          if (elemFil) elemFil.textContent = String(filSum);
+          const g = table.querySelector('[data-grand-total="elem"]');
+          if (g) g.textContent = String(engSum + filSum);
+        }
+        // Junior
+        if (jrEng || jrFil) {
+          let engJ = 0, filJ = 0;
+          const engRowJ = jrEng ? jrEng.closest('tr') : null;
+          const filRowJ = jrFil ? jrFil.closest('tr') : null;
+          if (engRowJ) engJ = sumInputsInRow(engRowJ);
+          if (filRowJ) filJ = sumInputsInRow(filRowJ);
+          if (jrEng) jrEng.textContent = String(engJ);
+          if (jrFil) jrFil.textContent = String(filJ);
+          const gJ = table.querySelector('[data-grand-total="junior"]');
+          if (gJ) gJ.textContent = String(engJ + filJ);
+        }
+      } catch (e2) { /* ignore */ }
+    });
+  }
+
+  // ---------------- ADM helpers ----------------
+  function toggleADMFields(isOffered) {
+    const container = document.querySelector('.adm-table')?.closest('.card') || document;
+    const controls = container.querySelectorAll('.adm-table input, .adm-table textarea, .adm-table select, #add-adm-ppa');
+    controls.forEach(el => {
+      if (el.type === 'hidden') return;
+      // Prefer readOnly so values still post when disabled; keep Add button disabled
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        try { el.readOnly = !isOffered; } catch(e) {}
+      } else if (el.tagName === 'SELECT') {
+        try { el.disabled = !isOffered; } catch(e) {}
+      } else if (el.id === 'add-adm-ppa') {
+        try { el.disabled = !isOffered; } catch(e) {}
+      }
+    });
+  }
+  function addADMPPA() {
+    const tbody = document.getElementById('adm-table-body');
+    const template = document.querySelector('.adm-row-template');
+    if (!tbody || !template) return;
+    // Find TOTAL_FORMS for ADM formset by sampling template field name prefix
+    const sample = template.querySelector('input, textarea, select');
+    if (!sample || !sample.name) return;
+    const prefix = sample.name.split('-')[0];
+    const total = document.querySelector(`input[name="${prefix}-TOTAL_FORMS"]`);
+    const idx = total ? parseInt(total.value || '0', 10) : 0;
+    const html = template.outerHTML.replace(/__prefix__/g, String(idx)).replace('style="display:none;"', '');
+    const temp = document.createElement('tbody'); temp.innerHTML = html; const row = temp.querySelector('tr');
+    row.classList.remove('adm-row-template'); tbody.appendChild(row);
+    if (total) total.value = String(idx + 1);
+    // Refresh delete handlers and normalize labels to "Delete"
+    try { attachADMDeleteHandlers(); } catch (e) {}
+  }
+
+  // Confirm ADM delete and normalize text to "Delete"
+  function handleADMDeleteCheckbox(e) {
+    const cb = e.target; const row = cb.closest('tr'); if (!row) return;
+    if (cb.checked) {
+      if (!confirm('Are you sure you want to delete this ADM row?')) { cb.checked = false; return; }
+      row.style.display = 'none';
+    } else {
+      row.style.display = '';
+    }
+  }
+  function attachADMDeleteHandlers() {
+    document.querySelectorAll('.adm-delete-control input[type="checkbox"]').forEach(cb => {
+      cb.removeEventListener('change', handleADMDeleteCheckbox);
+      cb.addEventListener('change', handleADMDeleteCheckbox);
+    });
+    document.querySelectorAll('.adm-delete-text').forEach(span => { span.textContent = 'Delete'; });
+    // Clicking the label should toggle the checkbox; let the change handler
+    // show a single confirmation. Avoid double confirms.
+    document.querySelectorAll('.adm-delete-control').forEach(lbl => {
+      lbl.addEventListener('click', function(e){
+        const cb = this.querySelector('input[type="checkbox"]');
+        if (!cb) return;
+        if (e.target === cb) return; // native checkbox click
+        e.preventDefault();
+        cb.click(); // triggers change -> single confirm
       });
-    }
-  });
-  
-  return errors;
-}
+    });
+  }
 
-// Display validation errors uniformly
-function displayCrossTabValidationErrors(tabSelector, errors) {
-  // Clear existing cross-tab validation errors only
-  document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-  
-  errors.forEach(error => {
-    // down or right arrow
-    const errorEl = document.createElement('div');
-    errorEl.className = 'cross-tab-validation-error';
-    errorEl.style.cssText = `
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #dc2626;
-      padding: 0.75rem;
-      border-radius: 6px;
-      margin: 0.5rem 0;
-      font-size: 0.875rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      width: 100%;
-      box-sizing: border-box;
-    `;
-    errorEl.innerHTML = `<span style="color: #dc2626;">!</span> ${error.message}`;
+  // ---------------- PCT helpers (0–100% visual hint) ----------------
+  function wirePctValidation() {
+    document.querySelectorAll('.pct-area-row .pct-input input').forEach(inp => {
+      let hint = inp.parentElement?.querySelector('.pct-hint-error');
+      if (!hint) {
+        hint = document.createElement('small');
+        hint.className = 'pct-hint-error';
+        hint.textContent = 'Enter a value from 0–100';
+        inp.parentElement.appendChild(hint);
+      }
+      const redraw = () => {
+        const v = parseFloat(inp.value || '');
+        const bad = Number.isFinite(v) ? (v < 0 || v > 100) : false;
+        hint.style.display = bad ? 'block' : 'none';
+      };
+      inp.addEventListener('input', redraw);
+      inp.addEventListener('change', redraw);
+      redraw();
+    });
+  }
+
+  // ---------------- Init ----------------
+  // ---------------- Read-Only Mode ----------------
+  function initializeReadOnlyMode() {
+    const form = byId('submission-form');
+    if (!form) return;
     
-    // down or right arrow
-    if (error.element) {
-      // down or right arrow
-      if (error.element.tagName === 'TR') {
-        const errorRow = document.createElement('tr');
-        errorRow.className = 'cross-tab-validation-error';
-        const colspan = error.element.querySelectorAll('td').length;
-        errorRow.innerHTML = `<td colspan="${colspan}" style="padding: 0; border: none;"></td>`;
-        errorRow.querySelector('td').appendChild(errorEl);
-        // Place error ABOVE the concerned row for better visibility
-        error.element.insertAdjacentElement('beforebegin', errorRow);
+    const canEdit = (form.dataset.canEdit === '1');
+    if (canEdit) return; // Don't disable fields if editing is allowed
+    const status = (form.dataset.status || '').toLowerCase();
+    
+    console.log('Initializing read-only mode for submitted form');
+    
+    // Disable all form inputs, textareas, and selects that aren't already handled by template
+    const formElements = form.querySelectorAll('input:not([type="hidden"]):not([readonly]):not([disabled]), textarea:not([readonly]):not([disabled]), select:not([disabled])');
+    formElements.forEach(element => {
+      if (element.type === 'submit' || element.type === 'button') {
+        element.disabled = true;
+      } else if (element.type === 'checkbox' || element.type === 'radio') {
+        element.disabled = true;
+        element.style.cursor = 'not-allowed';
       } else {
-        // down or right arrow
-        // Place error above the element
-        error.element.insertAdjacentElement('beforebegin', errorEl);
-      }
-    }
-  });
-}
-
-// down or right arrow
-function validateCurrentTab() {
-  const currentTab = new URLSearchParams(window.location.search).get('tab') || 'projects';
-  
-  if (currentTab === 'rma') {
-    const rmaErrors = validateRMAEnrollment();
-    displayCrossTabValidationErrors('[data-tab="rma"]', rmaErrors);
-    return rmaErrors.length === 0;
-  } else if (currentTab === 'reading') {
-    const readingErrors = validateReadingEnrollment();
-    displayCrossTabValidationErrors('[data-tab="reading"]', readingErrors);
-    return readingErrors.length === 0;
-  }
-  
-  return true;
-}
-
-// down or right arrow
-document.addEventListener('DOMContentLoaded', function() {
-  
-  // Add validation on RMA input changes
-  document.querySelectorAll('input[id*="rma_rows"]').forEach(input => {
-    input.addEventListener('blur', () => {
-      setTimeout(() => { // Small delay to ensure value is updated
-        if (new URLSearchParams(window.location.search).get('tab') === 'rma') {
-          // Clear existing errors first
-          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-          validateCurrentTab();
+        // Use readonly for text inputs and textareas to preserve values during form submission
+        if (element.tagName.toLowerCase() === 'input' && 
+            ['text', 'email', 'number', 'date', 'datetime-local', 'time'].includes(element.type)) {
+          element.readOnly = true;
+          element.style.backgroundColor = '#f3f4f6';
+          element.style.cursor = 'not-allowed';
+          element.style.border = '1px solid #d1d5db';
+        } else if (element.tagName.toLowerCase() === 'textarea') {
+          element.readOnly = true;
+          element.style.backgroundColor = '#f3f4f6';
+          element.style.cursor = 'not-allowed';
+          element.style.border = '1px solid #d1d5db';
+        } else {
+          element.disabled = true;
+          element.style.backgroundColor = '#f3f4f6';
+          element.style.cursor = 'not-allowed';
         }
-      }, 100);
+      }
     });
     
-    input.addEventListener('input', () => {
-      // Only validate and clear errors if needed, don't just clear all errors
-      setTimeout(() => {
-        if (new URLSearchParams(window.location.search).get('tab') === 'rma') {
-          // down or right arrow
-          const currentErrors = validateRMAEnrollment();
-          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-          if (currentErrors.length > 0) {
-            displayCrossTabValidationErrors('[data-tab="rma"]', currentErrors);
-          }
-        }
-      }, 300); // Slight delay to avoid too frequent validation
+    // Disable all buttons except navigation buttons
+    const buttons = form.querySelectorAll('button:not([disabled])');
+    buttons.forEach(button => {
+      // Keep tab navigation buttons enabled
+      if (button.classList.contains('tab-nav')) {
+        return;
+      }
+      button.disabled = true;
+      button.style.opacity = '0.5';
+      button.style.cursor = 'not-allowed';
     });
-  });
-  
-  // Add validation on Reading input changes (only if Reading tab exists)
-  const readingInputs = document.querySelectorAll('input[id*="reading_crla"], input[id*="reading_philiri"]');
-  if (readingInputs.length > 0) {
-    readingInputs.forEach(input => {
-      input.addEventListener('blur', () => {
-        setTimeout(() => { // Small delay to ensure value is updated
-          if (new URLSearchParams(window.location.search).get('tab') === 'reading') {
-            // Clear existing errors first
-            document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-            validateCurrentTab();
-          }
-        }, 100);
-      });
-      
-      input.addEventListener('input', () => {
-        // Only validate and clear errors if needed, don't just clear all errors
-        setTimeout(() => {
-          if (new URLSearchParams(window.location.search).get('tab') === 'reading') {
-            // down or right arrow
-            const currentErrors = validateReadingEnrollment();
-            document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-            if (currentErrors.length > 0) {
-              displayCrossTabValidationErrors('[data-tab="reading"]', currentErrors);
-            }
-          }
-        }, 300); // Slight delay to avoid too frequent validation
-      });
-    });
-  } else {
-  }
-  
-  // Validate on tab switch
-  const tabLinks = document.querySelectorAll('a[href*="?tab="]');
-  tabLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      const newTab = new URL(link.href).searchParams.get('tab');
-      if (newTab === 'rma' || newTab === 'reading') {
-        setTimeout(() => {
-          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());
-          validateCurrentTab();
-        }, 500); // down or right arrow
+    
+    // Hide action buttons for adding/deleting items
+    const actionButtons = form.querySelectorAll('.btn--primary:not(.tab-nav), .btn--danger, .btn--secondary:not(.tab-nav)');
+    actionButtons.forEach(button => {
+      if (!button.classList.contains('tab-nav')) {
+        button.style.display = 'none';
       }
     });
-  });
-  
-  // down or right arrow
-  const currentTab = new URLSearchParams(window.location.search).get('tab');
-  if (currentTab === 'rma' || currentTab === 'reading') {
+    
+    // Add visual indicator for read-only state (contextual by status)
+    const readOnlyOverlay = document.createElement('div');
+    let bg = '#fee2e2', border = '#fca5a5', titleColor = '#dc2626', textColor = '#7f1d1d',
+        title = 'Form Read-Only', message = 'This submission cannot be edited.';
+    if (status === 'noted') {
+      bg = '#ecfdf5'; border = '#86efac'; titleColor = '#16a34a'; textColor = '#166534';
+      title = 'Noted';
+      message = 'Review completed. You can view all entries; edits are disabled.';
+    } else if (status === 'submitted') {
+      bg = '#fef3c7'; border = '#f59e0b'; titleColor = '#b45309'; textColor = '#92400e';
+      title = 'Submitted';
+      message = 'Awaiting section review. Edits are disabled until returned.';
+    }
+    readOnlyOverlay.innerHTML = `
+      <div style="position: fixed; top: 80px; right: 20px; background: ${bg}; border: 1px solid ${border}; border-radius: 8px; padding: 12px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 1000; max-width: 320px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+            ${status === 'noted' ? '<path fill="#16a34a" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 10-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z"/>' : '<path fill="#b45309" d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 4a.75.75 0 00-1.5 0v5a.75.75 0 001.5 0V6zm0 7a.75.75 0 10-1.5 0 .75.75 0 001.5 0z"/>'}
+          </svg>
+          <div>
+            <div style="font-weight: 600; color: ${titleColor}; font-size: 14px;">${title}</div>
+            <div style="color: ${textColor}; font-size: 12px;">${message}</div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(readOnlyOverlay);
+    
+    // Auto-hide the notification after 5 seconds
     setTimeout(() => {
-      validateCurrentTab();
-    }, 1000);
+      readOnlyOverlay.style.transition = 'opacity 0.3s ease';
+      readOnlyOverlay.style.opacity = '0';
+      setTimeout(() => readOnlyOverlay.remove(), 300);
+    }, 5000);
   }
+
+  function init() {
+    initTabsAndForm();
+    attachProjectDeleteHandlers();
+    attachActivityDeleteHandlers();
+    // Make Activity headers clickable to collapse/expand
+    attachActivityHeaderToggles();
+    attachADMDeleteHandlers();
+    // Initialize read-only mode for submitted forms
+    initializeReadOnlyMode();
+    // Clean stray activity subheaders on load and toggle header/empty state
+    document.querySelectorAll('.activity-table-body').forEach(tbody => { cleanActivitySubheaders(tbody); updateActivitiesHeaderVisibility(tbody); });
+    // Sanitize any garbled em-dash placeholders in templates
+    try { document.querySelectorAll('.na-cell').forEach(td => { td.textContent = '-'; }); } catch (e) {}
+    // Show toast if a project quick-save just occurred
+    try {
+      const msg = sessionStorage.getItem('project_quicksave_toast');
+      if (msg) {
+        sessionStorage.removeItem('project_quicksave_toast');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.style.cssText = 'position:fixed; top:16px; right:16px; background:#111827; color:#fff; padding:10px 14px; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); z-index:9999; font-size:.9rem;';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.transition = 'opacity .3s'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1600);
+      }
+    } catch (e) {}
+    // SLP helpers
+    initializeSLPOfferedToggle();
+  initializeSLPCompetenciesAndReasons();
+    initializeSLPNestedAccordion();
+    initializeReadingDifficulties();
+    wireSLPSaveSubject();
+    // ADM helpers
+    const admToggle = document.querySelector('.adm-offered-checkbox');
+    if (admToggle) toggleADMFields(admToggle.checked);
+    const addAdmBtn = document.getElementById('add-adm-ppa');
+    if (addAdmBtn) addAdmBtn.addEventListener('click', function(e){ e.preventDefault(); addADMPPA(); });
+    // PCT helpers
+    wirePctValidation();
+    // RMA/Reading validation wiring on demand
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'rma') wireRMAVerification();
+    if (tab === 'reading') wireReadingVerification();
+    // Sort Performance Snapshot grade items by Grade 1..12 within each subject list
+    setTimeout(() => {
+      try {
+        if (window.sortPerformanceSnapshot) window.sortPerformanceSnapshot();
+      } catch (e) {}
+    }, 0);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+
+  // Globals required by inline onclicks
+  window.addProjectRow = addProjectRow;
+  window.addActivityRow = addActivityRow;
+  window.toggleGrade = toggleGrade;
+  window.toggleSubject = toggleSubject;
+  window.toggleADMFields = toggleADMFields;
+  window.addADMPPA = addADMPPA;
+  // Ensure toggles are initialized on page load
+  attachActivityHeaderToggles();
 });
 
-// Expose validation functions globally
-window.validateCurrentTab = validateCurrentTab;
-window.validateRMAEnrollment = validateRMAEnrollment;
-window.validateReadingEnrollment = validateReadingEnrollment;
+// Helper: sort Performance Snapshot lists by numeric grade order (Grade 1..12, Kinder=0)
+(function(){
+  function gradeToNum(label) {
+    if (!label) return 999;
+    const t = label.trim();
+    if (/^Kinder$/i.test(t)) return 0;
+    const m = t.match(/Grade\s+(\d+)/i);
+    if (m) return parseInt(m[1], 10);
+    return 999;
+  }
+  window.sortPerformanceSnapshot = function sortPerformanceSnapshot() {
+    // 1) Sort each subject's list items by grade number
+    document.querySelectorAll('.slp-summary-list').forEach(ul => {
+      const items = Array.from(ul.querySelectorAll('li.slp-summary-item'));
+      items.sort((a, b) => {
+        const ga = gradeToNum(a.querySelector('.slp-summary-grade')?.textContent || '');
+        const gb = gradeToNum(b.querySelector('.slp-summary-grade')?.textContent || '');
+        return ga - gb;
+      });
+      items.forEach(li => ul.appendChild(li));
+    });   
+
+    // 2) Sort the subject sections within each column by the lowest grade appearing in that subject
+    document.querySelectorAll('.slp-summary-column').forEach(column => {
+      const subjects = Array.from(column.querySelectorAll('.slp-summary-subject'));
+      subjects.sort((sa, sb) => {
+        const la = sa.querySelectorAll('.slp-summary-grade');
+        const lb = sb.querySelectorAll('.slp-summary-grade');
+        const mina = la.length ? Math.min(...Array.from(la).map(el => gradeToNum(el.textContent || ''))) : 999;
+        const minb = lb.length ? Math.min(...Array.from(lb).map(el => gradeToNum(el.textContent || ''))) : 999;
+        return mina - minb;
+      });
+      subjects.forEach(s => column.appendChild(s));
+    });
+  };
+
+  // Removed Suggested DNME Action Focus sorting per user request
+})();
 
 
 
@@ -2010,63 +1236,3 @@ window.validateReadingEnrollment = validateReadingEnrollment;
 
 
 
-
-
-function normalizeExistingActivityDeletions() {
-  document.querySelectorAll('.activity-row input[name*="-DELETE"]').forEach(function(cb) {
-    if (cb.checked) {
-      const row = cb.closest('tr');
-      if (!row) return;
-      // If this row is still in the table (not already handled), apply deletion UI
-      if (!activityDeleteState.get(row)) {
-        // simulate the same behavior as checked path in handleActivityDelete without prompting
-        const tbody = row.parentElement;
-        const form = tbody ? tbody.closest('form') : null;
-        if (!tbody || !form) return;
-        const bin = getActivityDeleteBin(form);
-        const nextSibling = row.nextSibling;
-        const placeholder = document.createElement('tr');
-        placeholder.className = 'activity-row-placeholder';
-        const colCount = row.querySelectorAll('td').length || 12;
-        placeholder.innerHTML = `<td colspan="${colCount}" style="padding: 0.75rem; background: #fef2f2; color: #b91c1c; font-size: 0.9rem; border: 1px solid #fecaca;"><span style="margin-right: 1rem;">Activity marked for removal.</span><button type="button" class="undo-remove" style="background: none; border: none; color: #2563eb; cursor: pointer; text-decoration: underline; padding: 0;">Undo</button></td>`;
-        if (nextSibling) {
-          tbody.insertBefore(placeholder, nextSibling);
-        } else {
-          tbody.appendChild(placeholder);
-        }
-        bin.appendChild(row);
-        row.classList.add('marked-for-deletion');
-        row.style.display = '';
-        activityDeleteState.set(row, { placeholder, bin });
-        placeholder.querySelector('.undo-remove').addEventListener('click', function(){
-          // restore
-          cb.checked = false;
-          if (placeholder.parentNode) {
-            placeholder.parentNode.insertBefore(row, placeholder);
-            placeholder.remove();
-          }
-          if (bin.contains(row)) {
-            bin.removeChild(row);
-          }
-          row.classList.remove('marked-for-deletion');
-          row.style.display = '';
-          activityDeleteState.delete(row);
-        }, { once: true });
-      }
-    }
-  });
-}
-
-// No details-below helpers needed; details are always rendered in a second row
-
-// Supervision helpers may be defined elsewhere; provide safe no-op fallbacks
-if (typeof renumberSupervisionRows !== 'function') {
-  function renumberSupervisionRows() { /* noop */ }
-}
-if (typeof attachSupervisionDeleteHandlers !== 'function') {
-  function attachSupervisionDeleteHandlers() { /* noop */ }
-}
-
-
-
-function initSupervisionManagement() {  if (!document.querySelector('.supervision-table')) {    return;  }  renumberSupervisionRows();  attachSupervisionDeleteHandlers();}/** * Initialize ADM functionality */function initADMFunctionality() {  renumberADMRows();  const checkbox = document.querySelector('.adm-offered-checkbox');  if (checkbox) {    // Set initial state    toggleADMFields(checkbox.checked);        // down or right arrow    checkbox.addEventListener('change', function() {      toggleADMFields(this.checked);    });  }    // Attach delete handlers to existing rows  attachADMDeleteHandlers();    // Add PPA button handler  const addButton = document.getElementById('add-adm-ppa');  if (addButton) {    addButton.addEventListener('click', function(e) {      e.preventDefault();      addADMPPA();    });  }}function initFormsetHelpers() {  initADMFunctionality();  initSupervisionManagement();}// Initialize formset helpers when DOM is readyif (document.readyState === 'loading') {  document.addEventListener('DOMContentLoaded', initFormsetHelpers);} else {  initFormsetHelpers();}// down or right arrowwindow.addProjectRow = addProjectRow;window.addActivityRow = addActivityRow;window.saveProjectQuick = saveProjectQuick;window.toggleADMFields = toggleADMFields;window.addADMPPA = addADMPPA;// ============================================// CROSS-TAB ENROLLMENT VALIDATION// ============================================// Get SLP enrollment data as the source of truthfunction getSLPEnrollmentData() {  const slpData = {};    // down or right arrow  document.querySelectorAll('input[id*="slp_rows"][id$="-enrolment"]').forEach(input => {    const value = parseInt(input.value) || 0;    if (value > 0) {      // Extract grade from the input ID pattern: id_slp_rows-0-grade_7-filipino-enrolment      const match = input.id.match(/slp_rows-\d+-(grade_\d+|kinder)-[^-]+-enrolment/);      if (match) {        let gradePart = match[1]; // down or right arrow        let gradeName;                if (gradePart === 'kinder') {          gradeName = 'Kinder';        } else {          // Convert "grade_7" to "Grade 7"          gradeName = gradePart.replace('grade_', 'Grade ');        }                // down or right arrow        if (!slpData[gradeName]) {          slpData[gradeName] = value;        }      }    }  });    return slpData;}// Validate RMA tab proficiency bands consistencyfunction validateRMAEnrollment() {  const errors = [];    // Check each RMA row - only validate proficiency bands sum  document.querySelectorAll('input[id*="rma_rows"][id$="-enrolment"]').forEach(enrollmentInput => {    const row = enrollmentInput.closest('tr');    if (!row) {      return;    }    const gradeCell = row.querySelector('td:first-child');        if (enrollmentInput && gradeCell) {      const rmaEnrollment = parseInt(enrollmentInput.value) || 0;      const grade = gradeCell.textContent.trim();            // Check proficiency bands sum if enrollment > 0      if (rmaEnrollment > 0) {        const proficiencyInputs = row.querySelectorAll('input[id$="-emerging_not_proficient"], input[id$="-emerging_low_proficient"], input[id$="-developing_nearly_proficient"], input[id$="-transitioning_proficient"], input[id$="-at_grade_level"]');        const proficiencySum = Array.from(proficiencyInputs).reduce((sum, input) => sum + (parseInt(input.value) || 0), 0);                if (proficiencySum !== rmaEnrollment) {          errors.push({            element: row,            message: `${grade} proficiency bands total (${proficiencySum}) must equal enrollment (${rmaEnrollment})`,            type: 'proficiency_sum_mismatch'          });        }      }    }  });    return errors;}// Validate Reading assessments total against SLP enrollment (Reading has no enrollment inputs)function validateReadingEnrollment() {  const slpData = getSLPEnrollmentData();  const errors = [];    // Only validate if we have SLP data to compare against  if (Object.keys(slpData).length === 0) {    return errors;  }      // down or right arrow  const gradeMap = {    '1': 'Grade 1', '2': 'Grade 2', '3': 'Grade 3', '4': 'Grade 4', '5': 'Grade 5',    '6': 'Grade 6', '7': 'Grade 7', '8': 'Grade 8', '9': 'Grade 9', '10': 'Grade 10'  };    // Validate CRLA assessments (Grades 1-3) - sum across all proficiency levels  const crlaGradeTotals = {};     document.querySelectorAll('input[id*="reading_crla_new"]').forEach(input => {    const match = input.id.match(/_(mt|fil|eng)_grade_(\d+)/);    if (match) {      const gradeNum = match[2];      const gradeName = gradeMap[gradeNum];      const value = parseInt(input.value) || 0;            if (!crlaGradeTotals[gradeName]) {        crlaGradeTotals[gradeName] = 0;      }      crlaGradeTotals[gradeName] += value;    }  });    const crlaSection = (() => {    const input = document.querySelector('input[id*="reading_crla_new"]');    return input ? input.closest('.section-card') : null;  })();  // Check CRLA totals against SLP enrollment  Object.keys(crlaGradeTotals).forEach(grade => {    const readingTotal = crlaGradeTotals[grade];    const slpEnrollment = slpData[grade] || 0;        if (readingTotal > 0 && slpEnrollment > 0 && readingTotal !== slpEnrollment) {      errors.push({        element: crlaSection,        message: `${grade} CRLA total (${readingTotal}) must match SLP enrollment (${slpEnrollment})`,        type: 'crla_enrollment_mismatch'      });    }  });    // Validate PHILIRI assessments (Grades 4-10) - sum across all proficiency levels  const philiriGradeTotals = {};    document.querySelectorAll('input[id*="reading_philiri_new"]').forEach(input => {    const match = input.id.match(/_(eng|fil)_grade_(\d+)/);    if (match) {      const gradeNum = match[2];      const gradeName = gradeMap[gradeNum];      const value = parseInt(input.value) || 0;            if (!philiriGradeTotals[gradeName]) {        philiriGradeTotals[gradeName] = 0;      }      philiriGradeTotals[gradeName] += value;    }  });    const philiriSection = (() => {    const input = document.querySelector('input[id*="reading_philiri_new"]');    return input ? input.closest('.section-card') : null;  })();  // Check PHILIRI totals against SLP enrollment  Object.keys(philiriGradeTotals).forEach(grade => {    const readingTotal = philiriGradeTotals[grade];    const slpEnrollment = slpData[grade] || 0;        if (readingTotal > 0 && slpEnrollment > 0 && readingTotal !== slpEnrollment) {      errors.push({        element: philiriSection,        message: `${grade} PHILIRI total (${readingTotal}) must match SLP enrollment (${slpEnrollment})`,        type: 'philiri_enrollment_mismatch'      });    }  });    return errors;}// Display validation errors uniformlyfunction displayCrossTabValidationErrors(tabSelector, errors) {  // Clear existing cross-tab validation errors only  document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());    errors.forEach(error => {    // down or right arrow    const errorEl = document.createElement('div');    errorEl.className = 'cross-tab-validation-error';    errorEl.style.cssText = `      background: #fef2f2;      border: 1px solid #fecaca;      color: #dc2626;      padding: 0.75rem;      border-radius: 6px;      margin: 0.5rem 0;      font-size: 0.875rem;      display: flex;      align-items: center;      gap: 0.5rem;      width: 100%;      box-sizing: border-box;    `;    errorEl.innerHTML = `<span style="color: #dc2626;">!</span> ${error.message}`;        // down or right arrow    if (error.element) {      // down or right arrow      if (error.element.tagName === 'TR') {        const errorRow = document.createElement('tr');        errorRow.className = 'cross-tab-validation-error';        const colspan = error.element.querySelectorAll('td').length;        errorRow.innerHTML = `<td colspan="${colspan}" style="padding: 0; border: none;"></td>`;        errorRow.querySelector('td').appendChild(errorEl);        // Place error ABOVE the concerned row for better visibility        error.element.insertAdjacentElement('beforebegin', errorRow);      } else {        // down or right arrow        // Place error above the element        error.element.insertAdjacentElement('beforebegin', errorEl);      }    }  });}// down or right arrowfunction validateCurrentTab() {  const currentTab = new URLSearchParams(window.location.search).get('tab') || 'projects';    if (currentTab === 'rma') {    const rmaErrors = validateRMAEnrollment();    displayCrossTabValidationErrors('[data-tab="rma"]', rmaErrors);    return rmaErrors.length === 0;  } else if (currentTab === 'reading') {    const readingErrors = validateReadingEnrollment();    displayCrossTabValidationErrors('[data-tab="reading"]', readingErrors);    return readingErrors.length === 0;  }    return true;}// down or right arrowdocument.addEventListener('DOMContentLoaded', function() {    // Add validation on RMA input changes  document.querySelectorAll('input[id*="rma_rows"]').forEach(input => {    input.addEventListener('blur', () => {      setTimeout(() => { // Small delay to ensure value is updated        if (new URLSearchParams(window.location.search).get('tab') === 'rma') {          // Clear existing errors first          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());          validateCurrentTab();        }      }, 100);    });        input.addEventListener('input', () => {      // Only validate and clear errors if needed, don't just clear all errors      setTimeout(() => {        if (new URLSearchParams(window.location.search).get('tab') === 'rma') {          // down or right arrow          const currentErrors = validateRMAEnrollment();          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());          if (currentErrors.length > 0) {            displayCrossTabValidationErrors('[data-tab="rma"]', currentErrors);          }        }      }, 300); // Slight delay to avoid too frequent validation    });  });    // Add validation on Reading input changes (only if Reading tab exists)  const readingInputs = document.querySelectorAll('input[id*="reading_crla"], input[id*="reading_philiri"]');  if (readingInputs.length > 0) {    readingInputs.forEach(input => {      input.addEventListener('blur', () => {        setTimeout(() => { // Small delay to ensure value is updated          if (new URLSearchParams(window.location.search).get('tab') === 'reading') {            // Clear existing errors first            document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());            validateCurrentTab();          }        }, 100);      });            input.addEventListener('input', () => {        // Only validate and clear errors if needed, don't just clear all errors        setTimeout(() => {          if (new URLSearchParams(window.location.search).get('tab') === 'reading') {            // down or right arrow            const currentErrors = validateReadingEnrollment();            document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());            if (currentErrors.length > 0) {              displayCrossTabValidationErrors('[data-tab="reading"]', currentErrors);            }          }        }, 300); // Slight delay to avoid too frequent validation      });    });  } else {  }    // Validate on tab switch  const tabLinks = document.querySelectorAll('a[href*="?tab="]');  tabLinks.forEach(link => {    link.addEventListener('click', (e) => {      const newTab = new URL(link.href).searchParams.get('tab');      if (newTab === 'rma' || newTab === 'reading') {        setTimeout(() => {          document.querySelectorAll('.cross-tab-validation-error').forEach(el => el.remove());          validateCurrentTab();        }, 500); // down or right arrow      }    });  });    // down or right arrow  const currentTab = new URLSearchParams(window.location.search).get('tab');  if (currentTab === 'rma' || currentTab === 'reading') {    setTimeout(() => {      validateCurrentTab();    }, 1000);  }});// Expose validation functions globallywindow.validateCurrentTab = validateCurrentTab;window.validateRMAEnrollment = validateRMAEnrollment;window.validateReadingEnrollment = validateReadingEnrollment;function normalizeExistingActivityDeletions() {  document.querySelectorAll('.activity-row input[name*="-DELETE"]').forEach(function(cb) {    if (cb.checked) {      const row = cb.closest('tr');      if (!row) return;      // If this row is still in the table (not already handled), apply deletion UI      if (!activityDeleteState.get(row)) {        // simulate the same behavior as checked path in handleActivityDelete without prompting        const tbody = row.parentElement;        const form = tbody ? tbody.closest('form') : null;        if (!tbody || !form) return;        const bin = getActivityDeleteBin(form);        const nextSibling = row.nextSibling;        const placeholder = document.createElement('tr');        placeholder.className = 'activity-row-placeholder';        const colCount = row.querySelectorAll('td').length || 12;        placeholder.innerHTML = `<td colspan="${colCount}" style="padding: 0.75rem; background: #fef2f2; color: #b91c1c; font-size: 0.9rem; border: 1px solid #fecaca;"><span style="margin-right: 1rem;">Activity marked for removal.</span><button type="button" class="undo-remove" style="background: none; border: none; color: #2563eb; cursor: pointer; text-decoration: underline; padding: 0;">Undo</button></td>`;        if (nextSibling) {          tbody.insertBefore(placeholder, nextSibling);        } else {          tbody.appendChild(placeholder);        }        bin.appendChild(row);        row.classList.add('marked-for-deletion');        row.style.display = '';        activityDeleteState.set(row, { placeholder, bin });        placeholder.querySelector('.undo-remove').addEventListener('click', function(){          // restore          cb.checked = false;          if (placeholder.parentNode) {            placeholder.parentNode.insertBefore(row, placeholder);            placeholder.remove();          }          if (bin.contains(row)) {            bin.removeChild(row);          }          row.classList.remove('marked-for-deletion');          row.style.display = '';          activityDeleteState.delete(row);        }, { once: true });      }    }  });}// No details-below helpers needed; details are always rendered in a second row

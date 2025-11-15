@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Edit School Profile</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin:2rem; max-width:720px; }
+      form { display:grid; gap:1rem; }
+      label { font-weight:600; display:block; margin-bottom:.35rem; }
+      input, textarea { width:100%; padding:.6rem .75rem; border-radius:.5rem; border:1px solid #cbd5f5; font-size:1rem; }
+      button { padding:.6rem 1.1rem; border-radius:.5rem; border:1px solid #0b57d0; background:#0b57d0; color:#fff; cursor:pointer; }
+      a { color:#0b57d0; text-decoration:none; }
+      .field { display:flex; flex-direction:column; }
+      .muted { color:#64748b; font-size:.9rem; }
+      .grid-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; }
+    </style>
+  </head>
+  <body>
+    {% include "includes/auth_nav.html" %}
+    <p><a href="{{ list_url }}">&larr; Back to profiles</a></p>
+    <h1>Edit Profile &ndash; {{ profile.school.name }}</h1>
+    <p class="muted">{{ profile.school.code }}{% if profile.school.district %} &middot; {{ profile.school.district.name }}{% endif %}</p>
+
+    {% include "includes/role_flag_badges.html" %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="field">
+        <label for="{{ form.head_name.id_for_label }}">School Head Name</label>
+        {{ form.head_name }}
+      </div>
+      <div class="field">
+        <label for="{{ form.head_contact.id_for_label }}">Contact Details</label>
+        {{ form.head_contact }}
+        <span class="muted">Include phone/email for quick coordination.</span>
+      </div>
+      <div class="grid-two">
+        <div class="field">
+          <label for="{{ form.grade_span_start.id_for_label }}">Grade Span Start</label>
+          {{ form.grade_span_start }}
+        </div>
+        <div class="field">
+          <label for="{{ form.grade_span_end.id_for_label }}">Grade Span End</label>
+          {{ form.grade_span_end }}
+        </div>
+      </div>
+      <div class="field">
+        <label>SHS Strands Offered</label>
+        {{ form.shs_strands }}
+        <span class="muted">Check the SHS strands your school offers. Specialized SLP subjects will default accordingly.</span>
+      </div>
+      <div class="field">
+        <label for="{{ form.strands.id_for_label }}">Other Programs (optional)</label>
+        {{ form.strands }}
+        <span class="muted">Add other programs here (e.g., SPED, ALS). Comma-separated or JSON list.</span>
+      </div>
+      <div>
+        <button type="submit">Save changes</button>
+      </div>
+    </form>
+  </body>
+</html>

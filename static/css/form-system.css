@@ -1,0 +1,2253 @@
+﻿/**
+ * SGOD MIS Form Design System
+ * Boring, Clean, Professional - No Fancy Stuff
+ * 
+ * Philosophy: Government form aesthetic
+ * - Simple gray borders
+ * - White backgrounds
+ * - Minimal colors
+ * - Fast and accessible
+ */
+
+/*
+ * IMPORTANT SCOPING NOTE
+ * ----------------------
+ * This stylesheet is intentionally scoped to the submission page only.
+ * Any component that could overlap with global app styles (buttons, inputs,
+ * tables, cards, utilities) is prefixed with the `.submission-page` wrapper.
+ * The template `templates/submissions/edit_submission.html` sets this class
+ * on the `<body>` tag. If you reuse these styles elsewhere, add the
+ * `.submission-page` class to the page root or duplicate the specific rules.
+ */
+
+/* ============================================
+   CSS VARIABLES (Design Tokens)
+   ============================================ */
+
+:root {
+  /* Colors - Minimal Palette */
+  --color-primary: #2563eb;
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-warning: #f59e0b;
+  
+  --color-text: #111827;
+  --color-text-light: #6b7280;
+  --color-text-muted: #9ca3af;
+  
+  --color-border: #d1d5db;
+  --color-border-light: #e5e7eb;
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f9fafb;
+  --color-bg-gray: #f3f4f6;
+  
+  /* Typography */
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Courier New', Consolas, monospace;
+  
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  
+  /* Spacing */
+  --space-1: 0.25rem;    /* 4px */
+  --space-2: 0.5rem;     /* 8px */
+  --space-3: 0.75rem;    /* 12px */
+  --space-4: 1rem;       /* 16px */
+  --space-5: 1.25rem;    /* 20px */
+  --space-6: 1.5rem;     /* 24px */
+  --space-8: 2rem;       /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  
+  /* Borders & Shadows */
+  --border-radius: 0.375rem;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   COMPONENT 1: TAB NAVIGATION
+   ============================================ */
+
+.submission-tabs {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-list {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tab-list a {
+  display: inline-block;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.tab-list a:hover {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-primary);
+}
+
+.tab-list a.active {
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.tab-progress {
+  margin-top: var(--space-3);
+  height: 4px;
+  background: var(--color-bg-gray);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-indicator {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
+/* ============================================
+   COMPONENT 2: SECTION CARD
+   ============================================ */
+
+.submission-page .section-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.submission-page .section-card__header {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-4) 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border-light);
+}
+
+.submission-page .section-card__intro {
+  background: var(--color-bg-subtle);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--border-radius);
+  border-left: 3px solid var(--color-border);
+  margin-bottom: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+  line-height: 1.6;
+}
+
+.submission-page .section-card__intro p {
+  margin: 0;
+}
+
+/* ============================================
+   COMPONENT 3: DATA TABLE
+   ============================================ */
+
+.submission-page .data-table-wrapper {
+  overflow-x: auto;
+  margin: var(--space-4) 0;
+}
+
+.submission-page .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  background: var(--color-bg);
+}
+
+.submission-page .data-table thead th {
+  background: var(--color-bg-subtle);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.submission-page .data-table tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.submission-page .data-table tbody tr:hover {
+  background: var(--color-bg-subtle);
+}
+
+.submission-page .data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Table modifiers */
+.submission-page .data-table--compact tbody td {
+  padding: var(--space-2) var(--space-3);
+}
+
+.submission-page .data-table th.text-center,
+.submission-page .data-table td.text-center {
+  text-align: center;
+}
+
+.submission-page .data-table th.text-right,
+.submission-page .data-table td.text-right {
+  text-align: right;
+}
+
+/* ============================================
+   COMPONENT 4: BUTTONS
+   ============================================ */
+
+ .submission-page .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.submission-page .btn:hover {
+  background: var(--color-bg-subtle);
+}
+
+.submission-page .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submission-page .btn--primary {
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.submission-page .btn--primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.submission-page .btn--secondary {
+  background: var(--color-bg-gray);
+  border-color: var(--color-border);
+}
+
+.submission-page .btn--secondary:hover {
+  background: var(--color-bg-subtle);
+}
+
+.submission-page .btn--success {
+  background: var(--color-success);
+  color: var(--color-bg);
+  border-color: var(--color-success);
+}
+
+.submission-page .btn--success:hover {
+  background: #15803d;
+}
+
+/* Added danger variant (app.css originally defined it; ensure parity here) */
+.submission-page .btn--danger {
+  background: var(--color-error);
+  color: var(--color-bg);
+  border-color: var(--color-error);
+}
+.submission-page .btn--danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.submission-page .btn--small {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.submission-page .btn--large {
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-base);
+}
+
+/* Alias for legacy usage from app.css (.btn--sm) */
+.submission-page .btn--sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+/* ============================================
+   COMPONENT 5: FORM INPUTS
+   ============================================ */
+
+.submission-page .form-field {
+  margin-bottom: var(--space-4);
+}
+
+.submission-page .form-label {
+  display: block;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.submission-page .form-input,
+.submission-page .form-textarea,
+.submission-page .form-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  transition: border-color 0.15s ease;
+}
+
+/* Make all input, textarea, select elements consistent */
+.submission-page input[type="text"],
+.submission-page input[type="number"],
+.submission-page input[type="email"],
+.submission-page input[type="password"],
+.submission-page input[type="date"],
+.submission-page textarea,
+.submission-page select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.submission-page .form-input:focus,
+.submission-page .form-textarea:focus,
+.submission-page .form-select:focus,
+.submission-page input:focus,
+.submission-page textarea:focus,
+.submission-page select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.submission-page .form-textarea,
+.submission-page textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.6;
+}
+
+.submission-page .form-input[type="number"],
+.submission-page input[type="number"] {
+  text-align: right;
+  font-weight: 600;
+}
+
+/* Inline errors */
+.form-error {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}
+
+.form-field.has-error .form-input,
+.form-field.has-error .form-textarea,
+.form-field.has-error .form-select {
+  border-color: var(--color-error);
+}
+
+/* Form grid layouts */
+.submission-page .form-grid {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.submission-page .form-grid--two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.submission-page .form-grid--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 768px) {
+  .form-grid--two,
+  .form-grid--three {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================
+   COMPONENT 6: ALERTS & MESSAGES
+   ============================================ */
+
+.alert {
+  padding: var(--space-4);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-4);
+  border-left: 4px solid;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.alert--info {
+  background: #eff6ff;
+  border-color: var(--color-primary);
+  color: #1e40af;
+}
+
+.alert--success {
+  background: #f0fdf4;
+  border-color: var(--color-success);
+  color: #166534;
+}
+
+.alert--warning {
+  background: #fffbeb;
+  border-color: var(--color-warning);
+  color: #92400e;
+}
+
+.alert--error {
+  background: #fef2f2;
+  border-color: var(--color-error);
+  color: #991b1b;
+}
+
+/* Inline validation message */
+.validation-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--border-radius);
+  color: var(--color-error);
+  font-size: var(--text-xs);
+  margin-top: var(--space-2);
+}
+
+.validation-error::before {
+  content: "âš ";
+  font-size: var(--text-base);
+}
+
+/* ============================================
+   COMPONENT 7: ACTIONS BAR (Bottom sticky)
+   ============================================ */
+
+.submission-page .form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-8);
+}
+
+.form-actions__buttons {
+  display: flex;
+  gap: var(--space-3);
+}
+
+/* ============================================
+   UTILITIES
+   ============================================ */
+
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+.text-small {
+  font-size: var(--text-xs);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-0 { margin-bottom: 0; }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-6 { margin-bottom: var(--space-6); }
+
+.mt-0 { margin-top: 0; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+
+/* ============================================
+  DASHBOARD COMPONENTS
+  ============================================ */
+
+/* Quarter card (restore missing selector wrapper) */
+.quarter-card {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: white;
+  border: 2px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: 1.25rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.quarter-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.quarter-card--active {
+  border-color: var(--color-primary);
+  background: #eff6ff;
+}
+
+.quarter-card__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-light);
+  margin-bottom: var(--space-2);
+}
+
+.quarter-card__value {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: var(--space-2) 0;
+}
+
+.quarter-card__status {
+  font-size: var(--text-xs);
+  color: var(--color-text-light);
+  margin-bottom: var(--space-3);
+}
+
+.quarter-card__progress {
+  background: var(--color-border-light);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: var(--space-3);
+}
+
+.quarter-card__progress-bar {
+  background: var(--color-primary);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* ============================================
+   READING ASSESSMENT COMPONENTS
+   ============================================ */
+
+/* Reading Intro */
+.reading-intro {
+  background: var(--color-bg-subtle);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--border-radius);
+  border-left: 3px solid var(--color-border);
+  margin-bottom: var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+}
+
+.reading-intro p {
+  margin: 0;
+}
+
+/* Period Selector */
+.period-selector {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.period-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.period-options {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-3) var(--space-5);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.period-btn:hover {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-primary);
+}
+
+.period-btn.active {
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.period-subtitle {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: var(--space-1);
+}
+
+/* Assessment Section */
+.assessment-section {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.assessment-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-5) 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border-light);
+}
+
+/* Assessment Level Card */
+.assessment-level-card {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.assessment-level-card:last-child {
+  margin-bottom: 0;
+}
+
+.level-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 var(--space-4) 0;
+}
+
+/* Reading Matrix Table */
+.assessment-matrix {
+  overflow-x: auto;
+}
+
+.reading-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+}
+
+.reading-matrix-table thead th {
+  background: var(--color-bg-subtle);
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.reading-matrix-table thead th.subject-col {
+  text-align: left;
+}
+
+.reading-matrix-table tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: center;
+}
+
+.reading-matrix-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.subject-label {
+  font-weight: 600;
+  text-align: left !important;
+  color: var(--color-text);
+}
+
+.na-cell {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.total-cell {
+  background: var(--color-bg-subtle);
+  font-weight: 600;
+}
+
+.total-value {
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.total-row {
+  background: var(--color-bg-gray);
+  font-weight: 600;
+}
+
+.total-label {
+  text-align: right !important;
+  padding-right: var(--space-4) !important;
+  text-transform: uppercase;
+  font-size: var(--text-sm);
+  letter-spacing: 0.05em;
+}
+
+.grand-total {
+  text-align: center !important;
+  color: var(--color-primary);
+}
+
+.grand-total strong {
+  font-size: var(--text-lg);
+}
+
+/* Interventions List */
+.interventions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.intervention-item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.intervention-label {
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--color-text);
+  min-width: 20px;
+  flex-shrink: 0;
+}
+
+.intervention-input {
+  flex: 1;
+}
+
+.intervention-input textarea {
+  width: 100%;
+  min-height: 60px;
+}
+
+/* Responsive for Reading */
+@media (max-width: 768px) {
+  .period-options {
+    flex-direction: column;
+  }
+  
+  .period-btn {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .reading-matrix-table {
+    font-size: var(--text-xs);
+  }
+  
+  .reading-matrix-table thead th,
+  .reading-matrix-table tbody td {
+    padding: var(--space-2);
+  }
+}
+
+/* ============================================
+   PCT (PERCENT IMPLEMENTATION) COMPONENTS
+   ============================================ */
+
+.pct-area-row {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.pct-area-header {
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border-light);
+}
+
+.pct-area-header strong {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pct-area-content {
+  display: flex;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .pct-area-content {
+    flex-direction: column;
+  }
+  
+  .pct-area-content .form-field {
+    width: 100% !important;
+  }
+}
+
+/* ============================================
+   SLP ACCORDION COMPONENTS
+   ============================================ */
+
+/* Nested accordion container */
+.slp-nested-accordion {
+  margin-top: var(--space-4);
+}
+
+/* Grade Level Accordion */
+.grade-accordion {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-4);
+  background: var(--color-bg);
+}
+
+.grade-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  cursor: pointer;
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.15s ease;
+}
+
+.grade-header:hover {
+  background: var(--color-bg-gray);
+}
+
+.grade-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.grade-title h4 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.accordion-icon {
+  font-size: var(--text-sm);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.grade-accordion.open .grade-header .accordion-icon {
+  transform: rotate(90deg);
+}
+
+.grade-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.subjects-count {
+  color: var(--color-text-light);
+}
+
+.completion-bar-container {
+  width: 100px;
+  height: 8px;
+  background: var(--color-bg-gray);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.completion-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 0.3s ease;
+}
+
+.completion-percentage {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Subjects Container */
+.subjects-container {
+  padding: var(--space-4);
+  background: var(--color-bg);
+}
+
+/* Subject Accordion */
+.subject-accordion {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-3);
+  background: var(--color-bg);
+}
+
+.subject-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  background: var(--color-bg);
+  transition: background 0.15s ease;
+}
+
+.subject-header:hover {
+  background: var(--color-bg-subtle);
+}
+
+.subject-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.subject-name {
+  font-weight: 600;
+  font-size: var(--text-base);
+}
+
+.subject-accordion.open .subject-header .accordion-icon {
+  transform: rotate(90deg);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--border-radius);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge.complete {
+  background: #f0fdf4;
+  color: var(--color-success);
+  border: 1px solid #bbf7d0;
+}
+
+.status-badge.incomplete {
+  background: #fffbeb;
+  color: var(--color-warning);
+  border: 1px solid #fef3c7;
+}
+
+.status-badge.not-started {
+  background: var(--color-bg-gray);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.status-badge.not-applicable {
+  background: var(--color-bg-gray);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+/* Subject Content */
+.subject-content {
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+}
+
+.subject-context-header {
+  margin-bottom: var(--space-4);
+}
+.slp-mismatch .subject-context-header {
+  border-left: 4px solid #dc2626;
+  padding-left: var(--space-3);
+}
+
+/* RMA mismatch row highlight */
+.rma-mismatch {
+  background: #fef2f2;
+  outline: 2px solid #dc2626;
+}
+
+.subject-label {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* Card Sections within Subject */
+.card-section {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-4) 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.section-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: 50%;
+  font-size: var(--text-base);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Validation Errors in SLP */
+.validation-errors {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid var(--color-error);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-4);
+}
+.validation-errors--compact {
+  padding: 6px 10px;
+  margin-bottom: var(--space-2);
+}
+
+.error-icon {
+  font-size: var(--text-xl);
+  color: var(--color-error);
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.error-messages {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: #991b1b;
+  line-height: 1.6;
+}
+
+.error-messages p {
+  margin: 0;
+}
+
+/* Thin highlight for SLP proficiency section when mismatched */
+.slp-proficiency-error {
+  border-top: 2px solid #ef4444;
+  border-bottom: 2px solid #ef4444;
+}
+
+/* Proficiency Grid */
+.proficiency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.proficiency-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.proficiency-field label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.proficiency-field input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+  background: var(--color-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.proficiency-field input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.proficiency-field input[type="number"] {
+  text-align: right;
+  font-weight: 600;
+}
+
+/* Offered Checkbox */
+.offered-checkbox {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-bg-subtle);
+  border-radius: var(--border-radius);
+}
+
+.offered-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* Not Offered Message */
+.not-offered-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-bg-gray);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  margin-top: var(--space-4);
+}
+
+.not-offered-icon {
+  color: var(--color-text-muted);
+}
+
+.not-offered-text strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text);
+}
+
+.not-offered-text p {
+  margin: 0;
+  color: var(--color-text-light);
+  font-size: var(--text-sm);
+}
+
+/* Field Labels in Analysis */
+.field-label,
+.analysis-label {
+  display: block;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.field-label strong,
+.analysis-label strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.field-label small,
+.analysis-label small {
+  display: block;
+  color: var(--color-text-light);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* Analysis Textarea */
+.analysis-textarea {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 100px;
+  background: var(--color-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.analysis-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.analysis-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Analysis Subsections */
+.analysis-subsection {
+  margin-bottom: var(--space-6);
+}
+
+.analysis-subsection h6 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin: 0 0 var(--space-4) 0;
+  color: var(--color-text);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.analysis-question {
+  margin-bottom: var(--space-4);
+}
+
+/* Analysis Progress */
+.analysis-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.progress-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--color-bg-gray);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-light);
+}
+
+/* Subject Save Actions */
+.subject-save-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border-light);
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+}
+
+.save-subject-btn {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-success);
+  color: var(--color-bg);
+  border: none;
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.save-subject-btn:hover {
+  background: #15803d;
+}
+
+.save-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-light);
+}
+
+/* Remediation Interventions Pairs Grid */
+.interventions-pairs {
+  display: grid;
+  grid-template-columns: minmax(240px,1fr) minmax(260px,1fr);
+  gap: .65rem 1rem;
+  margin-top: .5rem;
+}
+.intervention-reason {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: .55rem .7rem;
+  border-radius: .6rem;
+  font-size: .85rem;
+  line-height: 1.35;
+  color: #334155;
+  position: relative;
+  display: flex;
+}
+.intervention-reason-number {
+  font-weight: 600;
+  color: #0f172a;
+  margin-right: .45rem;
+}
+.interventions-pairs textarea.intervention-textarea {
+  resize: vertical;
+  min-height: 70px;
+  padding: .55rem .7rem;
+  font-size: .85rem;
+  line-height: 1.35;
+  width: 100%;
+}
+.interventions-hint { margin-top: .35rem; color: #64748b; font-size: .7rem; }
+.interventions-readonly { display:flex; flex-direction:column; gap:.5rem; margin-top:.5rem; }
+.interventions-readonly__title { font-weight:600; font-size:.9rem; color:#1f2937; }
+.interventions-readonly__body { white-space:pre-wrap; font-size:.85rem; color:#334155; background:#f8fafc; border:1px solid #e2e8f0; padding:.6rem .75rem; border-radius:.55rem; }
+.interventions-readonly__hint { font-size:.65rem; }
+@media (max-width: 768px) {
+  .interventions-pairs { grid-template-columns: 1fr; }
+  .intervention-reason { border-radius:.55rem; }
+}
+
+/* Proficiency Summary in Analysis */
+.proficiency-summary-analysis {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.proficiency-summary-analysis h6 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin: 0 0 var(--space-3) 0;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-3);
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.summary-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* Analysis Report Cards */
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.analysis-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  background: var(--color-bg);
+}
+
+.analysis-card-header h4 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.analysis-subtitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+}
+
+.ranking-list {
+  margin-top: var(--space-4);
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .section-card {
+    padding: var(--space-4);
+  }
+  
+  .tab-list {
+    flex-direction: column;
+  }
+  
+  .tab-list a {
+    text-align: center;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .form-actions__buttons {
+    flex-direction: column;
+  }
+  
+  .data-table {
+    font-size: var(--text-xs);
+  }
+  
+  .data-table thead th,
+  .data-table tbody td {
+    padding: var(--space-2);
+  }
+  
+  /* SLP Responsive */
+  .grade-stats {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+  }
+  
+  .proficiency-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+  .btn,
+  .form-actions,
+  .tab-list {
+    display: none;
+  }
+  
+  .section-card {
+    box-shadow: none;
+    border: 1px solid #000;
+    page-break-inside: avoid;
+  }
+  
+  .data-table {
+    font-size: 10pt;
+  }
+}
+
+/* ============================================
+   DASHBOARD COMPONENTS (SMME Admin)
+   ============================================ */
+
+/* Filter Bar */
+.filter-bar {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.filter-bar label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  gap: var(--space-2);
+  font-weight: 500;
+}
+
+.filter-bar select {
+  padding: var(--space-3);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-base);
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: border-color 0.15s ease;
+}
+
+.filter-bar select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filter-bar button {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-bar button:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* Stats Card (KPI Metrics) */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.stats-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.75rem;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: all 0.2s ease;
+}
+
+.stats-card:hover {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+
+.stats-card__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+  font-weight: 500;
+}
+
+.stats-card__value {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.stats-card__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.stats-card__trend {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-top: var(--space-1);
+}
+
+.stats-card__trend--up { 
+  color: var(--color-success); 
+}
+
+.stats-card__trend--down { 
+  color: var(--color-error); 
+}
+
+.stats-card__trend--neutral { 
+  color: var(--color-text-muted); 
+}
+
+/* Data Table - KPI Variant */
+.data-table--kpi {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-bg);
+  font-size: var(--text-sm);
+}
+
+.data-table--kpi th,
+.data-table--kpi td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border: 1px solid var(--color-border-light);
+}
+
+.data-table--kpi th {
+  background: var(--color-bg-subtle);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.data-table--kpi tbody tr:nth-child(even) {
+  background: var(--color-bg-subtle);
+}
+
+.data-table--kpi tbody tr:hover {
+  background: #f0f9ff;
+  cursor: pointer;
+}
+
+.data-table--kpi tfoot tr {
+  background: var(--color-bg-gray);
+  font-weight: 600;
+  border-top: 2px solid var(--color-border);
+}
+
+/* Table Wrapper for Scroll */
+.submission-page .table-scroll {
+  overflow-x: auto;
+  margin-bottom: var(--space-8);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-border-light);
+  background: var(--color-bg);
+}
+
+/* Export Bar */
+.export-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--color-bg-subtle);
+  border-radius: var(--border-radius);
+}
+
+.export-bar__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.export-bar__meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+/* Button Outline Variant */
+.submission-page .btn--outline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.submission-page .btn--outline:hover {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Dashboard Page Container */
+.dashboards-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+
+.dashboards-page h1 {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-6);
+}
+
+.dashboards-page .muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Responsive Dashboard */
+@media (max-width: 768px) {
+  .filter-bar {
+    grid-template-columns: 1fr;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .export-bar {
+    flex-direction: column;
+    gap: var(--space-4);
+    align-items: flex-start;
+  }
+  
+  .export-bar__meta {
+    text-align: left;
+  }
+}
+
+/* ============================================
+   SCHOOL PORTAL COMPONENTS
+   ============================================ */
+
+/* Card Component */
+.submission-page .card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-8);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.submission-page .card--wide {
+  width: 100%;
+}
+
+.submission-page .card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+.submission-page .card__header > div:first-child {
+  flex: 1;
+}
+
+.submission-page .card__header h1 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.submission-page .card__header h2 {
+  margin: 0 0 var(--space-1) 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.submission-page .card__header p {
+  margin: 0;
+  color: var(--color-text-light);
+  font-size: var(--text-sm);
+}
+
+/* Notice Component */
+.notice {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+}
+
+.notice--warning {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}
+
+/* Action List */
+.action-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-6) 0 0 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-4);
+  border-radius: var(--border-radius);
+}
+
+.action-item--danger {
+  border-left: 4px solid var(--color-error);
+  background: #fef2f2;
+}
+
+.action-item--warning {
+  border-left: 4px solid var(--color-warning);
+  background: #fffbeb;
+}
+
+.action-item__content {
+  flex: 1;
+}
+
+.action-item__content strong {
+  display: block;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.action-item__content p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.action-item__note {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--border-radius);
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+}
+
+/* Tool Cards */
+.tool-card {
+  display: block;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: all 0.2s ease;
+}
+
+.tool-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.tool-card strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-base);
+}
+
+.tool-card .muted {
+  font-size: var(--text-sm);
+}
+
+/* Grid Layouts */
+.grid--3col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Text Utilities */
+.text-danger {
+  color: var(--color-error) !important;
+}
+
+.slp-summary-column > h5 {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.5rem;
+  font-size: .9rem;
+  letter-spacing: .25px;
+  background: #fff;
+  border: 0;
+  box-shadow: inset 0 -1px 0 0 #e5e7eb;
+}
+.slp-summary-column--dnme { background:#fff; border-left:4px solid #ef4444; }
+.slp-summary-column--dnme > h5 { color:#b91c1c; }
+.slp-summary-column--outstanding { background:#fff; border-left:4px solid #10b981; }
+.slp-summary-column--outstanding > h5 { color:#047857; }
+/* ============================================
+   ENHANCED PROJECTS & ACTIVITIES TABLE
+   ============================================ */
+
+/* Improved table layout */
+.submission-page .projects-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: var(--text-sm);
+  background: white;
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left-width: 4px;
+  border-radius: 0.375rem;
+  font-weight: 600;
+.slp-summary-column--dnme .slp-summary-item { border-left-color:#ef4444; }
+.slp-summary-column--outstanding .slp-summary-item { border-left-color:#10b981; }
+  text-align: left;
+  border-bottom: 2px solid var(--color-border-light);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  vertical-align: top;
+}
+
+.submission-page .projects-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: top;
+}
+
+.submission-page .projects-table tr:last-child td {
+  border-bottom: none;
+}
+
+.submission-page .projects-table tr:hover {
+  background: var(--color-bg-subtle);
+}
+
+/* Column sizing for better layout */
+.submission-page .projects-table .col-activity { width: 18%; }
+.submission-page .projects-table .col-output { width: 8%; }
+.submission-page .projects-table .col-timeframe { width: 10%; }
+.submission-page .projects-table .col-budget { width: 8%; }
+.submission-page .projects-table .col-text { width: 15%; }
+.submission-page .projects-table .col-action { width: 6%; }
+
+/* Text overflow handling */
+.submission-page .text-cell {
+  position: relative;
+  max-width: 200px;
+}
+
+.submission-page .text-truncated {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  background: var(--color-bg-subtle);
+  transition: all 0.2s ease;
+}
+
+.submission-page .text-truncated:hover {
+  border-color: var(--color-primary);
+  background: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.submission-page .text-full {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.submission-page .text-cell.expanded .text-truncated {
+  display: none;
+}
+
+.submission-page .text-cell.expanded .text-full {
+  display: block;
+}
+
+/* Details-below layout */
+.submission-page .activity-details { display: table-row; }
+.submission-page .activity-details-grid {
+  display: grid;
+  /* Show all four narrative fields on one line when space allows */
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+@media (max-width: 1200px) {
+  /* Fall back to 2 columns on medium screens */
+  .submission-page .activity-details-grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+}
+@media (max-width: 700px) {
+  /* Stack on small screens */
+  .submission-page .activity-details-grid { grid-template-columns: 1fr; }
+}
+.submission-page .activity-details-grid .details-field textarea { min-height: 120px; }
+
+.submission-page .activity-details td {
+  background: #fafafa;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 6px;
+}
+
+/* Clearer group separation between activities */
+.submission-page .activity-details td { border-bottom: 2px solid var(--color-border-light); }
+.submission-page .activity-details + .activity-row td {
+  border-top: 2px solid var(--color-border-light);
+}
+
+/* Repeated header before Activity 2+ (matches thead) */
+.submission-page .activity-repeated-header td {
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  border-top: 2px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-2);
+}
+
+/* Make per-activity headers sticky for easier scanning */
+.submission-page .projects-table.repeated-headers .activity-repeated-header td {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+}
+
+/* Subtle zebra for activity base rows for readability */
+.submission-page .projects-table.repeated-headers .activity-row td { background: #fff; }
+.submission-page .projects-table.repeated-headers .activity-row:nth-of-type(even) td { background: #fbfbfb; }
+
+/* Align numeric inputs and use tabular numerals for columns */
+.submission-page .projects-table td input[type="number"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hide the original thead to avoid double headers */
+.submission-page .projects-table.repeated-headers thead { display: none; }
+
+/* Slim separator row removed */
+.submission-page .activity-repeated-header td { background: #f3f4f6; color:#111827; font-weight:600; font-size: var(--text-sm); border-top:2px solid var(--color-border-light); border-bottom:1px solid var(--color-border-light); padding: var(--space-2); }
+
+
+
+
+
+/* Hide table thead when using per-activity headers */
+.submission-page .projects-table.repeated-headers thead { display: none; }
+
+/* Subtle zebra for activity base rows */
+.submission-page .projects-table tr.activity-row td { background: #ffffff; }
+.submission-page .projects-table tr.activity-row:nth-of-type(even) td { background: #fbfbfb; }
+
+/* PCT (Percent Implementation) UI polish for consistency */
+.pct-area-row {
+  background: #ffffff;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--border-radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.pct-area-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: var(--space-3);
+}
+.pct-area-content {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+.pct-input { display: flex; align-items: center; gap: 8px; }
+.pct-suffix { color: var(--color-text-muted); font-weight: 600; }
+.pct-hint-error { color: var(--color-error); font-size: var(--text-xs); margin-top: 2px; display: none; }
+.pct-input { display: flex; align-items: center; gap: 8px; }
+.pct-suffix { color: var(--color-text-muted); font-weight: 600; }
+.pct-num-field .pct-input input { width: 100%; }
+.pct-notes-field textarea { min-height: 110px; }
+
+/* Project header enhancements */
+.submission-page .project-header {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #3b82f6;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.submission-page .project-header-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 280px;
+  gap: 12px;
+}
+.submission-page .project-header .project-delete-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.submission-page .project-header .project-delete-btn:hover { background: #fecaca; }
+
+/* Extra helpers for repeated headers */
+.submission-page .projects-table.repeated-headers .activity-repeated-header strong { display:flex; align-items:center; gap:8px; }
+.submission-page .projects-table.repeated-headers .activity-repeated-header .activity-title { color:#1f2937; font-weight:500; margin-left:6px; max-width:520px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.submission-page .projects-table.repeated-headers .activity-repeated-header .pct-small { color:#374151; font-weight:600; margin-left:8px; }
+.submission-page .projects-table.repeated-headers .activity-repeated-header .status-badge { margin-left:8px; }
+
+/* Mini progress bar for activity summary */
+.submission-page .progress-mini { width:120px; height:8px; background:#e5e7eb; border-radius:9999px; overflow:hidden; margin-left:auto; }
+.submission-page .progress-mini > span { display:block; height:100%; background:#22c55e; width:0%; }
+
+/* ADM delete label styled as button */
+.submission-page .adm-delete-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3); /* match .btn--small */
+  border-radius: var(--border-radius);
+  border: 1px solid var(--color-error);
+  background: var(--color-error); /* match .btn--danger */
+  color: #ffffff;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.submission-page .adm-delete-control:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+/* hide the checkbox visually but keep it accessible */
+.submission-page .adm-delete-control input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+/* ensure text color matches danger button despite inline color attributes */
+.submission-page .adm-delete-control .adm-delete-text {
+  color: #ffffff !important;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* Status badges reused */
+.status-badge.completed { background:#dcfce7; color:#16a34a; border:1px solid #bbf7d0; padding:2px 8px; border-radius:9999px; font-size:12px; font-weight:700; }
+.status-badge.in-progress { background:#fff7ed; color:#d97706; border:1px solid #fed7aa; padding:2px 8px; border-radius:9999px; font-size:12px; font-weight:700; }

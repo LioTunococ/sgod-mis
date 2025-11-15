@@ -1,0 +1,58 @@
+<nav class="app-nav">
+  <div class="app-nav__inner">
+    <div class="app-nav__cluster app-nav__cluster--brand">
+      <a class="app-nav__logo" href="{% url 'accounts:post_login_redirect' %}">SGOD MIS</a>
+    </div>
+
+    <div class="app-nav__cluster app-nav__cluster--links">
+      {% if request.user.is_authenticated %}
+        <div class="app-nav__links">
+          {% if role_flags.is_school_head and current_school %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'organizations:edit_my_school_profile' %}">School Profile</a>
+          {% endif %}
+          {% if role_flags.is_section_admin or role_flags.is_psds or role_flags.is_sgod_admin %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'district_submission_gaps' %}">Who Didn&apos;t Submit</a>
+          {% endif %}
+          {% if role_flags.is_psds or role_flags.is_sgod_admin %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'smme_kpi_dashboard' %}">SMME KPI</a>
+          {% endif %}
+          {% if role_flags.is_sgod_admin %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'division_overview' %}">Division Dashboard</a>
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'organizations:school_profile_list' %}">School Profiles</a>
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'organizations:manage_directory' %}">Directory Tools</a>
+          {% endif %}
+          {% if role_flags.is_section_admin %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'manage_section_forms' %}">Manage Forms</a>
+          {% endif %}
+          {% if role_flags.is_section_admin and section_admin_codes %}
+            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'review_queue' section_admin_codes.0 %}">Review Queue</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="app-nav__cluster app-nav__cluster--account">
+      {% if request.user.is_authenticated %}
+        <div class="app-nav__user-block">
+          <span class="app-nav__label">Signed in as</span>
+          <span class="app-nav__user">{{ request.user.get_full_name|default:request.user.username }}</span>
+        </div>
+        {% if role_flags.is_sgod_admin %}
+          {% if profile_alerts.missing_profiles or profile_alerts.missing_contacts or profile_alerts.span_mismatches %}
+            <span class="app-nav__alert">
+              {{ profile_alerts.missing_profiles }} profiles &middot; {{ profile_alerts.missing_contacts }} contacts &middot; {{ profile_alerts.span_mismatches }} span alerts
+            </span>
+          {% endif %}
+        {% endif %}
+        <div class="app-nav__actions">
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--nav btn--sm">Sign out</button>
+          </form>
+        </div>
+      {% else %}
+        <a class="btn btn--primary" href="{% url 'login' %}">Sign in</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>

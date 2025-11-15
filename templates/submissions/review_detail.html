@@ -6,11 +6,12 @@
     <meta charset="utf-8">
     <title>Review - {{ submission.form_template.title }}</title>
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/review.css' %}">
   </head>
   <body>
     {% include "includes/auth_nav.html" %}
 
-    <div class="container">
+    <div class="container review-page">
       <div class="portal-hero">
         <div class="portal-hero__header">
           <div>
@@ -24,6 +25,18 @@
               <span class="hero-summary__chip">School: {{ submission.school.name }}</span>
               <span class="hero-summary__chip">Section: {{ submission.form_template.section.name }}</span>
               <span class="hero-summary__chip">Submitted: {{ submission.submitted_at|default:'-' }}</span>
+              {# Reading timing chip derived from Quarter #}
+              {% with q=submission.period.quarter_tag %}
+                {% if q %}
+                  {% if q == 'Q1' %}
+                    <span class="hero-summary__chip">Reading: EOSY Results - Quarter 1</span>
+                  {% elif q == 'Q4' %}
+                    <span class="hero-summary__chip">Reading: MOSY Results - Quarter 4</span>
+                  {% else %}
+                    <span class="hero-summary__chip">Reading: BOSY Results - Quarter 2 or 3 Depends on what quarter was selected</span>
+                  {% endif %}
+                {% endif %}
+              {% endwith %}
             </div>
           </div>
           <div class="portal-hero__actions">
@@ -44,8 +57,49 @@
         </ul>
       {% endif %}
 
-      <div class="portal-main">
-        <section class="portal-main__primary">
+      <div class="grid">
+        <div class="card">
+          <h3>Meta</h3>
+          <p><strong>School:</strong> {{ submission.school.name }}</p>
+          <p><strong>Section:</strong> {{ submission.form_template.section.name }}</p>
+          {% if school_profile %}
+            <p><strong>School Head:</strong> {{ school_profile.head_name|default:"Not set" }}</p>
+            <p><strong>Contact:</strong> {{ school_profile.head_contact|default:"Not provided" }}</p>
+            {% if school_profile_strands %}
+              <p><strong>Strands / Programs:</strong> {{ school_profile_strands }}</p>
+            {% endif %}
+          {% endif %}
+          {% status_badge submission.status as badge %}
+          <p><strong>Status:</strong>
+            <span class="status-pill {% if badge.label %}status-pill--{{ badge.label|lower }}{% endif %}">{{ badge.label }}</span>
+          </p>
+          <p><strong>Submitted at:</strong> {{ submission.submitted_at|default:'-' }}</p>
+        </div>
+
+        <div class="card">
+          <h3>Timeline</h3>
+          {% if timeline_entries %}
+            <ul class="timeline">
+              {% for entry in timeline_entries %}
+                {% status_badge entry.to_status as entry_badge %}
+                <li class="timeline__item">
+                  <div class="timeline__summary">
+                    <span class="status-pill {% if entry_badge.label %}status-pill--{{ entry_badge.label|lower }}{% endif %}">{{ entry_badge.label }}</span>
+                    <span class="meta">{{ entry.created_at|date:'M j, Y H:i' }}</span>
+                  </div>
+                  <div class="timeline__meta">
+                    {% if entry.actor %}{{ entry.actor.get_full_name|default:entry.actor.username }}{% else %}System{% endif %}
+                    {% if entry.from_status %}changed from {{ entry.get_from_status_display }} to {{ entry.get_to_status_display }}{% else %}set status to {{ entry.get_to_status_display }}{% endif %}
+                  </div>
+                  {% if entry.remarks %}<p class="timeline__remarks">{{ entry.remarks|linebreaksbr }}</p>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No timeline entries yet.</p>
+          {% endif %}
+        </div>
+      </div>
 
       <div class="card review-card">
         <h3>Attachments</h3>
@@ -209,7 +263,7 @@
         {% endif %}
 
         {% if slp_dnme_summary %}
-          <section class="card review-subcard review-spacer">
+          <section class="card review-subcard review-spacer slp-summary-column slp-summary-column--dnme" aria-label="Top 5 Highest DNME">
             <h4>Top 5 Grade Levels with the Highest DNME</h4>
             <div class="slp-summary-grid">
               {% for subject, entries in slp_dnme_summary.items %}
@@ -226,24 +280,12 @@
               </section>
               {% endfor %}
             </div>
-            {% if slp_dnme_recommendations %}
-            <div class="slp-summary-actions">
-              <h6>Suggested DNME Action Focus</h6>
-              <ul class="slp-action-list">
-                {% for item in slp_dnme_recommendations %}
-                <li class="slp-action-item">
-                  <strong>{{ item.subject }}:</strong>
-                  Prioritise targeted remediation for {{ item.grade }} ({{ item.pct }}% DNME, {{ item.count }} learners).
-                </li>
-                {% endfor %}
-              </ul>
-            </div>
-            {% endif %}
+            {# Removed Suggested DNME Action Focus per user request #}
           </section>
         {% endif %}
 
         {% if slp_outstanding_summary %}
-          <section class="card review-subcard review-spacer">
+          <section class="card review-subcard review-spacer slp-summary-column slp-summary-column--outstanding" aria-label="Top 5 Highest Outstanding">
             <h4>Top 5 Grade Levels with the Highest Outstanding</h4>
             <div class="slp-summary-grid">
               {% for subject, entries in slp_outstanding_summary.items %}
@@ -612,64 +654,490 @@
       {% else %}
         <p class="muted">Only submissions marked Submitted can be acted upon.</p>
       {% endif %}
-        </section>
 
-        <aside class="portal-main__secondary">
-          <div class="portal-card">
-            <div class="card">
-              <h3>Meta</h3>
-              <p><strong>School:</strong> {{ submission.school.name }}</p>
-              <p><strong>Section:</strong> {{ submission.form_template.section.name }}</p>
-              {% if school_profile %}
-                <p><strong>School Head:</strong> {{ school_profile.head_name|default:"Not set" }}</p>
-                <p><strong>Contact:</strong> {{ school_profile.head_contact|default:"Not provided" }}</p>
-                {% if school_profile_strands %}
-                  <p><strong>Strands / Programs:</strong> {{ school_profile_strands }}</p>
-                {% endif %}
-              {% endif %}
-              {% status_badge submission.status as badge %}
-              <p><strong>Status:</strong>
-                <span class="status-pill {% if badge.label %}status-pill--{{ badge.label|lower }}{% endif %}">{{ badge.label }}</span>
-              </p>
-              <p><strong>Submitted at:</strong> {{ submission.submitted_at|default:'-' }}</p>
-            </div>
-
-            <div class="card">
-              <h3>Timeline</h3>
-              {% if timeline_entries %}
-                <ul class="timeline">
-                  {% for entry in timeline_entries %}
-                    {% status_badge entry.to_status as entry_badge %}
-                    <li class="timeline__item">
-                      <div class="timeline__summary">
-                        <span class="status-pill {% if entry_badge.label %}status-pill--{{ entry_badge.label|lower }}{% endif %}">{{ entry_badge.label }}</span>
-                        <span class="meta">{{ entry.created_at|date:'M j, Y H:i' }}</span>
-                      </div>
-                      <div class="timeline__meta">
-                        {% if entry.actor %}
-                          {{ entry.actor.get_full_name|default:entry.actor.username }}
-                        {% else %}
-                          System
-                        {% endif %}
-                        {% if entry.from_status %}
-                          changed from {{ entry.get_from_status_display }} to {{ entry.get_to_status_display }}
-                        {% else %}
-                          set status to {{ entry.get_to_status_display }}
-                        {% endif %}
-                      </div>
-                      {% if entry.remarks %}
-                        <p class="timeline__remarks">{{ entry.remarks|linebreaksbr }}</p>
-                      {% endif %}
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <p class="muted">No timeline entries yet.</p>
-              {% endif %}
-            </div>
-          </div>
-        </aside>
-      </div>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
     </div>
   </body>
 </html>

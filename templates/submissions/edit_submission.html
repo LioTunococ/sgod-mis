@@ -1,3 +1,4 @@
+﻿<!-- DEBUG: THIS IS THE CORRECT TEMPLATE -->
 {% load submission_tags %}
 {% load static %}
 
@@ -9,6 +10,11 @@
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
     <link rel="stylesheet" href="{% static 'css/form-system.css' %}">
     <!-- Boring Design System: Simple, Clean, Professional -->
+    <style>
+      /* SLP duplicate proficiency banner suppression */
+      .subject-content > .validation-errors { display:none !important; }
+      .proficiency-section .validation-errors { display:none; /* JS will toggle to flex when needed */ }
+    </style>
   </head>
   <body class="container submission-page">
     {% include "includes/auth_nav.html" %}
@@ -18,11 +24,58 @@
       {% if messages %}
         <ul class="message-list">
           {% for message in messages %}
-            <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+            {% if current_tab == 'slp' %}
+              {# On SLP tab: only show non-proficiency status messages (e.g. save/submit confirmations) #}
+              {% with msg_lower=message|lower %}
+                {% if 'proficiency' in msg_lower and 'bands total' in msg_lower %}
+                  {# hide duplicate global proficiency mismatch message entirely #}
+                {% elif 'saved' in msg_lower or 'submitted' in msg_lower or 'noted' in msg_lower or 'draft' in msg_lower %}
+                  <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+                {% endif %}
+              {% endwith %}
+            {% else %}
+              <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+            {% endif %}
           {% endfor %}
         </ul>
       {% endif %}
 
+        <script>
+  // RMA mismatch highlighting only (no global banner)
+        (function(){
+          function recalcRMA(){
+            var anyMismatch = false;
+            var rows = document.querySelectorAll('.rma-row');
+            rows.forEach(function(tr){
+              var idx = tr.getAttribute('data-rma-index');
+              if(idx === null) return;
+              function field(name){ return tr.querySelector('input[name="rma_rows-'+idx+'-'+name+'"]'); }
+              var enrolEl = field('enrolment');
+              if(!enrolEl) return;
+              var buckets = ['emerging_not_proficient','emerging_low_proficient','developing_nearly_proficient','transitioning_proficient','at_grade_level'];
+              var total = 0;
+              buckets.forEach(function(b){ var el = field(b); total += parseInt(el && el.value || '0',10); });
+              var enrol = parseInt(enrolEl.value||'0',10);
+              // No auto-fill for RMA; keep mismatch visual only
+              // Mismatch visual (add red outline to row)
+              if(total !== enrol){
+                anyMismatch = true;
+                tr.classList.add('rma-mismatch');
+              } else {
+                tr.classList.remove('rma-mismatch');
+              }
+            });
+            // No global banner
+          }
+          document.addEventListener('input', function(e){
+            if(e.target && /rma_rows-\d+-(enrolment|emerging_not_proficient|emerging_low_proficient|developing_nearly_proficient|transitioning_proficient|at_grade_level)/.test(e.target.name||'')){
+              recalcRMA();
+            }
+          });
+          document.addEventListener('DOMContentLoaded', recalcRMA);
+          window.recalcRMA = recalcRMA;
+        })();
+        </script>
       <!-- Submission Status Card -->
       <div class="submission-status-card">
         <div class="submission-status">
@@ -39,11 +92,7 @@
         </div>
       </div>
 
-      {% if not can_edit %}
-      <div class="message message--info read-only-banner">
-        This submission has been {{ submission.get_status_display|lower }} and is now read-only. You can review all entries but further edits are disabled.
-      </div>
-      {% endif %}
+      {# Removed redundant read-only banner; status is already shown and a compact toast will appear #}
 
       <!-- Tab Navigation -->
       <div class="submission-tabs">
@@ -55,17 +104,19 @@
         
         <!-- Tab Progress Bar -->
         <div class="tab-progress">
-          <div class="progress-indicator" style="width: {{ progress_width }}%;"></div>
+          <div class="progress-indicator" style="width: {{ progress_width|default:'0' }}%;"></div>
         </div>
       </div>
 
       <!-- Main Form -->
-      <form method="post" id="submission-form" 
+  <form method="post" id="submission-form" 
             data-current-tab="{{ current_tab }}" 
             data-expected-timings='{{ expected_timings_json|safe }}'
             data-can-edit="{% if can_edit %}1{% else %}0{% endif %}"
+    data-status="{{ submission.status }}"
             data-tab-order='{{ tabs_json|safe }}'>
         {% csrf_token %}
+  {# Global validation banner removed per request; per-section inline errors only #}
         <input type="hidden" name="tab" id="id_tab" value="{{ current_tab }}">
         <input type="hidden" name="next_tab" id="id_next_tab">
         <input type="hidden" name="autosave" id="id_autosave" value="0">
@@ -75,7 +126,7 @@
         <input type="hidden" name="current_subject_prefix" id="id_current_subject_prefix">
         <input type="hidden" name="current_subject_index" id="id_current_subject_index">
 
-        <!-- Content sections will be here -->
+  <!-- Content sections will be here -->
         {% if current_tab == 'projects' %}
           <div class="card">
             <h3 style="margin-bottom: 1rem;">I. PROJECTS AND ACTIVITIES</h3>
@@ -91,15 +142,47 @@
                   <div class="project-header-grid">
                     <div class="form-field">
                       <label class="form-label">Project:</label>
-                      {{ project_form.project_title }}
+                      {% if can_edit %}
+                        {{ project_form.project_title }}
+                      {% else %}
+                        <input type="text" 
+                               name="{{ project_form.project_title.name }}" 
+                               id="{{ project_form.project_title.id_for_label }}"
+                               value="{{ project_form.project_title.value|default:'' }}"
+                               class="project-field"
+                               readonly
+                               style="background-color: #f3f4f6; cursor: not-allowed;">
+                      {% endif %}
                     </div>
                     <div class="form-field">
                       <label class="form-label">Area of Concern:</label>
-                      {{ project_form.area_of_concern }}
+                      {% if can_edit %}
+                        {{ project_form.area_of_concern }}
+                      {% else %}
+                        <select name="{{ project_form.area_of_concern.name }}" 
+                                id="{{ project_form.area_of_concern.id_for_label }}"
+                                class="project-field"
+                                disabled
+                                style="background-color: #f3f4f6; cursor: not-allowed;">
+                          {% for value, label in project_form.area_of_concern.field.choices %}
+                            <option value="{{ value }}" {% if project_form.area_of_concern.value == value %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      {% endif %}
                     </div>
                     <div class="form-field">
                       <label class="form-label">Conference Date:</label>
-                      {{ project_form.conference_date }}
+                      {% if can_edit %}
+                        {{ project_form.conference_date }}
+                      {% else %}
+                        <input type="date" 
+                               name="{{ project_form.conference_date.name }}" 
+                               id="{{ project_form.conference_date.id_for_label }}"
+                               value="{{ project_form.conference_date.value|default:'' }}"
+                               class="project-field"
+                               readonly
+                               style="background-color: #f3f4f6; cursor: not-allowed;">
+                      {% endif %}
                     </div>
                   </div>
                   {% if can_edit %}
@@ -117,10 +200,10 @@
                       
                       <div class="projects-table-container">
                         
-                        <table class="projects-table">
+                        <table class="projects-table repeated-headers">
                               <thead>
                                 <tr>
-                                  <th class="col-activity">Activities</th>
+                                  <th class="col-activity">Activity</th>
                                   <th class="col-output">Output<br><small class="text-muted">Target</small></th>
                                   <th class="col-output">Output<br><small class="text-muted">Actual</small></th>
                                   <th class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></th>
@@ -133,9 +216,17 @@
                           <tbody class="activity-table-body" data-project-id="{{ project_form.instance.pk }}">
                             {% for activity_form in formset_data.formset %}
                               {{ activity_form.id }}
-                              {% if not forloop.first %}
-                              <tr class="activity-subheader">
-                                <td class="col-activity">Activities</td>
+                              <tr class="activity-repeated-header" data-activity-index="{{ forloop.counter0 }}" data-expanded="true">
+                                <td class="col-activity" colspan="8">
+                                  <span class="acc-icon" aria-hidden="true">▾</span>
+                                  <span class="activity-header-title">
+                                    Activity {{ forloop.counter }}:
+                                    <span class="activity-title-text">{{ activity_form.activity.value|default_if_none:'' }}</span>
+                                  </span>
+                                </td>
+                              </tr>
+                              <tr class="activity-table-headers" data-activity-index="{{ forloop.counter0 }}">
+                                <td class="col-activity">Activity</td>
                                 <td class="col-output">Output<br><small class="text-muted">Target</small></td>
                                 <td class="col-output">Output<br><small class="text-muted">Actual</small></td>
                                 <td class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></td>
@@ -144,8 +235,9 @@
                                 <td class="col-budget">Budget<br><small class="text-muted">Actual</small></td>
                                 <td class="col-action">Action</td>
                               </tr>
-                              {% endif %}
                               <tr class="activity-row" data-activity-index="{{ forloop.counter0 }}">
+                                <!-- Always render the hidden id field as the first cell -->
+                                <td style="display:none;">{{ activity_form.id }}</td>
                                 <td>
                                   <div class="text-cell" data-field="activity">
                                     {% if activity_form.activity.value and activity_form.activity.value|length > 50 %}
@@ -153,15 +245,47 @@
                                         {{ activity_form.activity.value|truncatechars:50 }}
                                       </span>
                                       <div class="text-full">
-                                        {{ activity_form.activity }}
+                                        {% if can_edit %}
+                                          {{ activity_form.activity }}
+                                        {% else %}
+                                          <textarea name="{{ activity_form.activity.name }}" 
+                                                    id="{{ activity_form.activity.id_for_label }}"
+                                                    readonly
+                                                    style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.activity.value|default:'' }}</textarea>
+                                        {% endif %}
                                       </div>
                                     {% else %}
-                                      {{ activity_form.activity }}
+                                      {% if can_edit %}
+                                        {{ activity_form.activity }}
+                                      {% else %}
+                                        <textarea name="{{ activity_form.activity.name }}" 
+                                                  id="{{ activity_form.activity.id_for_label }}"
+                                                  readonly
+                                                  style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.activity.value|default:'' }}</textarea>
+                                      {% endif %}
                                     {% endif %}
                                   </div>
                                 </td>
-                                <td>{{ activity_form.output_target }}</td>
-                                <td>{{ activity_form.output_actual }}</td>
+                                <td>
+                                  {% if can_edit %}
+                                    {{ activity_form.output_target }}
+                                  {% else %}
+                                    <textarea name="{{ activity_form.output_target.name }}" 
+                                              id="{{ activity_form.output_target.id_for_label }}"
+                                              readonly
+                                              style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.output_target.value|default:'' }}</textarea>
+                                  {% endif %}
+                                </td>
+                                <td>
+                                  {% if can_edit %}
+                                    {{ activity_form.output_actual }}
+                                  {% else %}
+                                    <textarea name="{{ activity_form.output_actual.name }}" 
+                                              id="{{ activity_form.output_actual.id_for_label }}"
+                                              readonly
+                                              style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.output_actual.value|default:'' }}</textarea>
+                                  {% endif %}
+                                </td>
                                 <td>
                                   {% with activity_form.timeframe_target as field %}
                                     <input type="date" 
@@ -169,6 +293,7 @@
                                            id="{{ field.id_for_label }}"
                                            value="{{ field.value|default:'' }}"
                                            class="table-input table-date"
+                                           {% if not can_edit %}readonly style="background-color: #f3f4f6; cursor: not-allowed;"{% endif %}
                                            {% if field.field.required %}required{% endif %}>
                                   {% endwith %}
                                 </td>
@@ -178,11 +303,34 @@
                                            name="{{ field.name }}" 
                                            id="{{ field.id_for_label }}"
                                            value="{{ field.value|default:'' }}"
-                                           class="table-input table-date">
+                                           class="table-input table-date"
+                                           {% if not can_edit %}readonly style="background-color: #f3f4f6; cursor: not-allowed;"{% endif %}>
                                   {% endwith %}
                                 </td>
-                                <td>{{ activity_form.budget_target }}</td>
-                                <td>{{ activity_form.budget_actual }}</td>
+                                <td>
+                                  {% if can_edit %}
+                                    {{ activity_form.budget_target }}
+                                  {% else %}
+                                    <input type="text" 
+                                           name="{{ activity_form.budget_target.name }}" 
+                                           id="{{ activity_form.budget_target.id_for_label }}"
+                                           value="{{ activity_form.budget_target.value|default:'' }}"
+                                           readonly
+                                           style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                                  {% endif %}
+                                </td>
+                                <td>
+                                  {% if can_edit %}
+                                    {{ activity_form.budget_actual }}
+                                  {% else %}
+                                    <input type="text" 
+                                           name="{{ activity_form.budget_actual.name }}" 
+                                           id="{{ activity_form.budget_actual.id_for_label }}"
+                                           value="{{ activity_form.budget_actual.value|default:'' }}"
+                                           readonly
+                                           style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                                  {% endif %}
+                                </td>
                                 
                                 <td>
                                   {% if can_edit %}
@@ -197,23 +345,51 @@
                               </tr>
                               <tr class="activity-details" data-project-id="{{ project_form.instance.pk }}" data-activity-index="{{ forloop.counter0 }}">
                                 <td colspan="8">
-                                  <div class="activity-number"><span class="section-number">{{ forloop.counter }}</span><span class="label">Activity</span></div>
+                                  
                                   <div class="activity-details-grid">
                                     <div class="details-field">
                                       <label class="form-label">Interpretation</label>
-                                      {{ activity_form.interpretation }}
+                                      {% if can_edit %}
+                                        {{ activity_form.interpretation }}
+                                      {% else %}
+                                        <textarea name="{{ activity_form.interpretation.name }}" 
+                                                  id="{{ activity_form.interpretation.id_for_label }}"
+                                                  readonly
+                                                  style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.interpretation.value|default:'' }}</textarea>
+                                      {% endif %}
                                     </div>
                                     <div class="details-field">
                                       <label class="form-label">Issues / Problems</label>
-                                      {{ activity_form.issues_unaddressed }}
+                                      {% if can_edit %}
+                                        {{ activity_form.issues_unaddressed }}
+                                      {% else %}
+                                        <textarea name="{{ activity_form.issues_unaddressed.name }}" 
+                                                  id="{{ activity_form.issues_unaddressed.id_for_label }}"
+                                                  readonly
+                                                  style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.issues_unaddressed.value|default:'' }}</textarea>
+                                      {% endif %}
                                     </div>
                                     <div class="details-field">
                                       <label class="form-label">Facilitating Factors</label>
-                                      {{ activity_form.facilitating_factors }}
+                                      {% if can_edit %}
+                                        {{ activity_form.facilitating_factors }}
+                                      {% else %}
+                                        <textarea name="{{ activity_form.facilitating_factors.name }}" 
+                                                  id="{{ activity_form.facilitating_factors.id_for_label }}"
+                                                  readonly
+                                                  style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.facilitating_factors.value|default:'' }}</textarea>
+                                      {% endif %}
                                     </div>
                                     <div class="details-field">
                                       <label class="form-label">Agreements</label>
-                                      {{ activity_form.agreements }}
+                                      {% if can_edit %}
+                                        {{ activity_form.agreements }}
+                                      {% else %}
+                                        <textarea name="{{ activity_form.agreements.name }}" 
+                                                  id="{{ activity_form.agreements.id_for_label }}"
+                                                  readonly
+                                                  style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ activity_form.agreements.value|default:'' }}</textarea>
+                                      {% endif %}
                                     </div>
                                   </div>
                                 </td>
@@ -223,12 +399,20 @@
                         </table>
                       </div>
                       
+                      <div class="activities-empty" data-project-id="{{ project_form.instance.pk }}" style="display: none;">
+                        <div class="empty-state" style="padding: .75rem 1rem; color: #6b7280;">
+                          No activities yet.
+                        </div>
+                      </div>
+                      
                       {% if can_edit %}
-                      <button type="button" class="btn btn--secondary" 
-                              style="margin-top: 0.75rem; font-size: 0.875rem; padding: 0.5rem 1rem;"
-                              onclick="addActivityRow({{ project_form.instance.pk }})">
-                        + Add Activity
-                      </button>
+                      <div class="project-actions" style="display:flex; justify-content:flex-end; align-items:center; gap:.75rem; padding:.5rem 0; border-top:1px dashed #e5e7eb; margin-top:.5rem;">
+                        <button type="button" class="btn btn--secondary"
+                                style="font-size: 0.875rem; padding: 0.5rem 1rem;"
+                                onclick="addActivityRow({{ project_form.instance.pk }})">
+                          + Add Activity
+                        </button>
+                      </div>
                       {% endif %}
                     {% endif %}
                   {% endfor %}
@@ -268,6 +452,85 @@
         {% load submission_tags %}
         {{ slp_formset.management_form }}
 
+        <script>
+        // Client-side SLP proficiency sum = enrolment validation
+        (function(){
+          function cardElements(){
+            return document.querySelectorAll('.proficiency-section');
+          }
+          function checkSLPRows(){
+            var anyMismatch = false;
+            cardElements().forEach(function(section){
+              var idx = section.getAttribute('data-form-index');
+              if(idx === null) return;
+              var enrolEl = section.querySelector('input[name="slp_rows-'+idx+'-enrolment"]');
+              if(!enrolEl) return;
+              var total = 0;
+              ['dnme','fs','s','vs','o'].forEach(function(f){
+                var el = section.querySelector('input[name="slp_rows-'+idx+'-'+f+'"]');
+                total += parseInt(el && el.value || '0',10);
+              });
+              var enrol = parseInt(enrolEl.value||'0',10);
+              // Build human-readable grade label for error messages
+              var gradeLabel = 'This subject';
+              try {
+                var labelEl = section.closest('.subject-content').querySelector('.subject-label');
+                if(labelEl){
+                  var txt = labelEl.textContent || '';
+                  var match = txt.match(/Grade\s+\d+/i);
+                  if(match) gradeLabel = match[0];
+                }
+              } catch(e) {}
+              // Prepare validation container
+              var errorsBox = section.querySelector('.validation-errors');
+              if(errorsBox){
+                errorsBox.style.display = 'none';
+                errorsBox.querySelector('.error-messages').innerHTML = '';
+              }
+              var badge = section.querySelector('.slp-mismatch-badge');
+              // Mismatch conditions: (a) enrolment entered and != total, or (b) enrolment is zero while counts provided
+              var mismatch = false;
+              var messages = [];
+              if(enrol > 0 && total !== enrol){
+                mismatch = true;
+                messages.push(gradeLabel + ' proficiency bands total ('+total+') must equal enrollment ('+enrol+')');
+              } else if(enrol === 0 && total > 0){
+                mismatch = true;
+                messages.push(gradeLabel + ' has proficiency counts ('+total+') but enrollment is 0 — enter correct enrollment.');
+              }
+              if(mismatch){
+                anyMismatch = true;
+                section.classList.add('slp-mismatch');
+                if(badge){
+                  badge.style.display='inline-block';
+                  badge.textContent='Mismatch';
+                }
+                if(errorsBox){
+                  errorsBox.style.display = 'flex';
+                  var list = errorsBox.querySelector('.error-messages');
+                  messages.forEach(function(msg){
+                    var p = document.createElement('div');
+                    p.textContent = msg;
+                    list.appendChild(p);
+                  });
+                }
+              } else {
+                section.classList.remove('slp-mismatch');
+                if(badge){ badge.style.display='none'; }
+              }
+            });
+            // Global banner removed; mismatches handled inline per section
+          }
+          document.addEventListener('input', function(e){
+            if(e.target && /slp_rows-\d+-(enrolment|dnme|fs|s|vs|o)/.test(e.target.name||'')){
+              checkSLPRows();
+            }
+          });
+          document.addEventListener('DOMContentLoaded', checkSLPRows);
+          window.checkSLPRows = checkSLPRows;
+        })();
+        </script>
+
         <div class="section-card">
           <div class="section-card__header">School Level of Proficiency (SLOP) Analysis</div>
           <div class="section-card__intro">
@@ -284,7 +547,7 @@
                     <h4>{{ grade_data.grade_label }}</h4>
                   </div>
                   <div class="grade-stats">
-                    <span class="subjects-count">{{ grade_data.completed_subjects }}/{{ grade_data.total_subjects }} subjects</span>
+                    <span class="subjects-count" data-completed="{{ grade_data.completed_subjects }}" data-total="{{ grade_data.total_subjects }}">{{ grade_data.completed_subjects }}/{{ grade_data.total_subjects }} subjects</span>
                     <div class="completion-bar-container">
                       <div class="completion-fill" style="width: {{ grade_data.completion_percentage }}%;"></div>
                     </div>
@@ -294,6 +557,13 @@
 
                 <!-- Subjects Container (hidden by default) -->
                 <div class="subjects-container" id="grade-{{ grade_data.grade_label|slugify }}" style="display: none;">
+                  {% if grade_data.grade_label in shs_grades and shs_selected_labels_join %}
+                  <div class="shs-selected-note" style="margin:0 0 0.75rem 0; font-size: 0.875rem; color:#374151;">
+                    <strong>Selected strands:</strong> {{ shs_selected_labels_join }}
+                  </div>
+                  {% endif %}
+                  {# Removed user-controlled hide toggle; automatic hiding is driven by School Profile #}
+                  {# Strand bulk actions removed; School Profile governs defaults #}
                   {% for form in grade_data.subjects %}
                     {{ form.id }}
                     {{ form.grade_label }}
@@ -301,7 +571,7 @@
                     
                     {% with status=form.instance|get_subject_status %}
                     <!-- Subject Accordion -->
-                    <div class="subject-accordion" data-subject="{{ form.instance.get_subject_display }}">
+                    <div class="subject-accordion" data-subject="{{ form.instance.get_subject_display }}" data-subject-key="{{ form.instance.subject }}" data-offered="{% if status == 'not-applicable' %}false{% else %}true{% endif %}" data-status="{{ status }}">
                       <div class="subject-header" onclick="toggleSubject('{{ grade_data.grade_label|slugify }}-{{ form.prefix|slice:'9:' }}')">
                         <div class="subject-title">
                           <span class="accordion-icon">&#9656;</span>
@@ -310,6 +580,8 @@
                             <span class="status-badge complete">Completed</span>
                           {% elif status == 'incomplete' %}
                             <span class="status-badge incomplete">In Progress</span>
+                          {% elif status == 'not-applicable' %}
+                            <span class="status-badge not-applicable">Not Offered</span>
                           {% elif status == 'not-started' %}
                             <span class="status-badge not-started">Not Started</span>
                           {% endif %}
@@ -328,6 +600,7 @@
 
                         <!-- Section 1: Proficiency Data Entry -->
                         <div class="card-section proficiency-section" data-section="proficiency" data-form-index="{{ subject_index }}">
+                          <span class="slp-mismatch-badge" style="display:none; background:#dc2626; color:#fff; font-size:0.625rem; padding:2px 6px; border-radius:10px; position:absolute; top:4px; right:8px;">Mismatch</span>
                           <h5 class="section-title">
                             <span class="section-number">1</span>
                             Proficiency Data Entry
@@ -341,7 +614,16 @@
                           
                           <div class="offered-checkbox">
                             <label>
-                              {{ form.is_offered }}
+                              {% if can_edit %}
+                                {{ form.is_offered }}
+                              {% else %}
+                                <input type="checkbox" 
+                                       name="{{ form.is_offered.name }}" 
+                                       id="{{ form.is_offered.id_for_label }}"
+                                       {% if form.is_offered.value %}checked{% endif %}
+                                       disabled
+                                       style="cursor: not-allowed;">
+                              {% endif %}
                               <span>Subject is offered at this grade level</span>
                             </label>
                           </div>
@@ -362,89 +644,166 @@
                           <div class="proficiency-grid">
                             <div class="proficiency-field">
                               <label>Enrolment</label>
-                              {{ form.enrolment }}
+                              {% if can_edit %}
+                                {{ form.enrolment }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.enrolment.name }}" 
+                                       id="{{ form.enrolment.id_for_label }}"
+                                       value="{{ form.enrolment.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                             <div class="proficiency-field">
                               <label>Did Not Meet</label>
-                              {{ form.dnme }}
+                              {% if can_edit %}
+                                {{ form.dnme }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.dnme.name }}" 
+                                       id="{{ form.dnme.id_for_label }}"
+                                       value="{{ form.dnme.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                             <div class="proficiency-field">
                               <label>Fairly Satisfactory</label>
-                              {{ form.fs }}
+                              {% if can_edit %}
+                                {{ form.fs }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.fs.name }}" 
+                                       id="{{ form.fs.id_for_label }}"
+                                       value="{{ form.fs.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                             <div class="proficiency-field">
                               <label>Satisfactory</label>
-                              {{ form.s }}
+                              {% if can_edit %}
+                                {{ form.s }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.s.name }}" 
+                                       id="{{ form.s.id_for_label }}"
+                                       value="{{ form.s.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                             <div class="proficiency-field">
                               <label>Very Satisfactory</label>
-                              {{ form.vs }}
+                              {% if can_edit %}
+                                {{ form.vs }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.vs.name }}" 
+                                       id="{{ form.vs.id_for_label }}"
+                                       value="{{ form.vs.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                             <div class="proficiency-field">
                               <label>Outstanding</label>
-                              {{ form.o }}
+                              {% if can_edit %}
+                                {{ form.o }}
+                              {% else %}
+                                <input type="number" 
+                                       name="{{ form.o.name }}" 
+                                       id="{{ form.o.id_for_label }}"
+                                       value="{{ form.o.value|default:'' }}"
+                                       readonly
+                                       style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                              {% endif %}
                             </div>
                           </div>
                         </div>
 
-                        <!-- Section 2: Top 3 LLC -->
+                        <!-- Section 2: Specific Competencies Not Mastered (Paragraph with 1-4) -->
                         <div class="card-section llc-section" data-section="llc" data-form-index="{{ subject_index }}">
                           <h5 class="section-title">
                             <span class="section-number">2</span>
-                            {{ form.instance.subject|title }} - Top 3 Least Learned Competencies
+                            {{ form.instance.subject|title }} - What specific competencies were not mastered during the quarter per subject per grade level?
                           </h5>
-                          
-                          <!-- Validation Errors Container -->
                           <div class="validation-errors" style="display: none;">
-                            <div class="error-icon">Ã¢Å¡Â </div>
+                            <div class="error-icon">!</div>
                             <div class="error-messages"></div>
                           </div>
-                          
-                          <label class="field-label">
-                            <strong>Top 3 LLC for {{ form.instance.subject|title }}</strong>
-                            <small>List the 3 least learned competencies (one per line)</small>
-                          </label>
-                          {{ form.top_three_llc }}
+                          {% if can_edit %}
+                          {% with current_val=form.top_three_llc.value|default:'' %}
+                          <textarea name="{{ form.top_three_llc.name }}" id="{{ form.top_three_llc.id_for_label }}" class="form-textarea llc-storage" rows="6" placeholder="List up to four specific competencies not mastered. One line per item starting with the number (e.g. 1. …)">{% if current_val %}{{ current_val }}{% else %}1. 
+2. 
+3. 
+4. {% endif %}</textarea>
+                          <small style="display:block; margin-top:.5rem; color:#6b7280;">Leave unused lines blank if fewer than four. Each filled line should be at least one descriptive sentence.</small>
+                          {% endwith %}
+                          {% else %}
+                          <div class="llc-readonly" style="white-space:pre-line;">{{ form.top_three_llc.value|default:'-' }}</div>
+                          {% endif %}
                         </div>
 
-                        <!-- Section 3: Intervention Plan -->
-                        <div class="card-section intervention-section" data-section="intervention" data-form-index="{{ subject_index }}">
+                        <!-- Section 3: Reasons for non-mastery (checkboxes) -->
+                        <div class="card-section reasons-section" data-section="reasons" data-form-index="{{ subject_index }}">
                           <h5 class="section-title">
                             <span class="section-number">3</span>
-                            {{ form.instance.subject|title }} - Intervention Plan
+                            What are the possible reasons for the non-mastery of the competencies?
                           </h5>
-                          
-                          <!-- Validation Errors Container -->
-                          <div class="validation-errors" style="display: none;">
-                            <div class="error-icon">Ã¢Å¡Â </div>
-                            <div class="error-messages"></div>
-                          </div>
-                          
-                          <label class="field-label">
-                            <strong>Planned Interventions for {{ form.instance.subject|title }}</strong>
-                            <small>Describe interventions for each LLC (match the order above)</small>
-                          </label>
-                          {{ form.intervention_plan }}
+                          {% if can_edit %}
+                            <div class="reasons-checkboxes" style="display:flex; flex-direction:column; gap:.4rem;">
+                              {% for val, label in form.REASON_CHOICES %}
+                              <label class="checkbox" style="display:flex; align-items:flex-start; gap:.5rem; font-weight:400;">
+                                <input type="checkbox" name="{{ form.prefix }}-reasons" value="{{ val }}" class="reason-choice"> <span>{{ label }}</span>
+                              </label>
+                              {% endfor %}
+                            </div>
+                            <div class="reason-other" style="display:none; margin-top:.75rem;">
+                              <label class="field-label" style="font-weight:600;">If other, please specify (2-5 sentences):</label>
+                              <textarea name="{{ form.prefix }}-reason_other" rows="3" class="form-textarea"></textarea>
+                            </div>
+                            <!-- Hidden storage fields for model -->
+                            <input type="hidden" name="{{ form.prefix }}-non_mastery_reasons" value="{{ form.instance.non_mastery_reasons|default:'' }}">
+                            <textarea name="{{ form.prefix }}-non_mastery_other" style="display:none;">{{ form.instance.non_mastery_other|default:'' }}</textarea>
+                          {% else %}
+                            <div class="reasons-readonly" style="display:flex; flex-direction:column; gap:.25rem;">
+                              {% if form.instance.non_mastery_reasons %}
+                                <div><strong>Selected reasons:</strong> {{ form.instance.non_mastery_reasons }}</div>
+                              {% else %}
+                                <div>No reasons selected</div>
+                              {% endif %}
+                              {% if form.instance.non_mastery_other %}
+                                <div style="margin-top:.25rem;"><strong>Other:</strong> {{ form.instance.non_mastery_other }}</div>
+                              {% endif %}
+                            </div>
+                          {% endif %}
                         </div>
 
-                                                <!-- Section 4: Intervention Strategy -->
-                        <div class="card-section strategy-section" data-section="strategy" data-form-index="{{ subject_index }}">
+                        <!-- Section 4: Remediation Interventions Based on Reasons -->
+                        <div class="card-section interventions-plan" data-section="interventions" data-form-index="{{ subject_index }}">
                           <h5 class="section-title">
                             <span class="section-number">4</span>
-                            {{ form.instance.subject|title }} - DNME Focus Strategy
+                            Based on the reason/s ticked above, what remediation interventions should be implemented to assist the learners?
                           </h5>
-                          <label class="field-label">
-                            <strong>At your level, what particular strategy or intervention can you implement to address learners under DNME?</strong>
-                            <small>Use the DNME rankings to prioritise your actions. Include concrete timelines, stakeholders, and required resources.</small>
-                          </label>
-                          <textarea 
-                            name="slp_analysis_{{ subject_index }}_overall_strategy"
-                            rows="5"
-                            class="strategy-textarea"
-                            placeholder="Describe the targeted interventions you will implement for DNME learners..."
-                          >{{ form.instance.analysis.overall_strategy|default:"" }}</textarea>
+                          {% if can_edit %}
+                          <div class="interventions-pairs">
+                            <!-- Dynamic rows injected here by JS: reason badge + intervention textarea -->
+                          </div>
+                          <small class="muted interventions-hint">Example: Conduct LAC on teaching the difficult-to-teach competencies</small>
+                          <!-- Hidden storage linked to model field -->
+                          <textarea name="{{ form.intervention_plan.name }}" id="{{ form.intervention_plan.id_for_label }}" class="interventions-storage" style="display:none;">{{ form.intervention_plan.value|default:'' }}</textarea>
+                          {% else %}
+                          <div class="interventions-readonly">
+                            <div class="interventions-readonly__title">Remediation Interventions (Reason → Action)</div>
+                            <div class="interventions-readonly__body">{{ form.intervention_plan.value|default:'No interventions encoded.' }}</div>
+                            <small class="muted interventions-readonly__hint">Reasons are managed in Question 3 above.</small>
+                          </div>
+                          {% endif %}
                         </div>
-                        <!-- End Strategy Section -->
+
+                        {# Strategy section removed per revision: merged into remediation interventions table #}
                         
                         <!-- Save Button for this Subject -->
                         {% if can_edit %}
@@ -478,7 +837,7 @@
           </div>
           <div class="slp-summary-grid">
             {% if slp_dnme_summary %}
-            <section class="slp-summary-column">
+            <section class="slp-summary-column slp-summary-column--dnme" aria-label="Top 5 Highest DNME">
               <h5>Top 5 Grade Levels with the Highest DNME</h5>
               {% for subject, entries in slp_dnme_summary.items %}
               <section class="slp-summary-subject">
@@ -496,7 +855,7 @@
             </section>
             {% endif %}
             {% if slp_outstanding_summary %}
-            <section class="slp-summary-column">
+            <section class="slp-summary-column slp-summary-column--outstanding" aria-label="Top 5 Highest Outstanding">
               <h5>Top 5 Grade Levels with the Highest Outstanding</h5>
               {% for subject, entries in slp_outstanding_summary.items %}
               <section class="slp-summary-subject">
@@ -514,19 +873,7 @@
             </section>
             {% endif %}
           </div>
-          {% if slp_dnme_recommendations %}
-          <div class="slp-summary-actions">
-            <h6>Suggested DNME Action Focus</h6>
-            <ul class="slp-action-list">
-              {% for item in slp_dnme_recommendations %}
-              <li class="slp-action-item">
-                <strong>{{ item.subject }}:</strong>
-                Prioritise targeted remediation for {{ item.grade }} ({{ item.pct }}% DNME, {{ item.count }} learners).
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endif %}
+          {# Removed Suggested DNME Action Focus per user request #}
         </div>
         {% endif %}
 
@@ -565,14 +912,31 @@
                 <div class="form-field pct-num-field">
                   <label class="form-label">Implementation %</label>
                   <div class="pct-input">
-                    {{ form.percent }}
+                    {% if can_edit %}
+                      {{ form.percent }}
+                    {% else %}
+                      <input type="number" 
+                             name="{{ form.percent.name }}" 
+                             id="{{ form.percent.id_for_label }}"
+                             value="{{ form.percent.value|default:'' }}"
+                             min="0" max="100"
+                             readonly
+                             style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                    {% endif %}
                     <span class="pct-suffix">%</span>
                   </div>
                   <small class="pct-hint">0–100%</small>
                 </div>
                 <div class="form-field pct-notes-field">
                   <label class="form-label">Key Action Points</label>
-                  {{ form.action_points }}
+                  {% if can_edit %}
+                    {{ form.action_points }}
+                  {% else %}
+                    <textarea name="{{ form.action_points.name }}" 
+                              id="{{ form.action_points.id_for_label }}"
+                              readonly
+                              style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">{{ form.action_points.value|default:'' }}</textarea>
+                  {% endif %}
                 </div>
               </div>
             </div>
@@ -596,19 +960,21 @@
           <p>Document reading assessment results and interventions for the school year.</p>
         </div>
 
-        <!-- Assessment Period Selector -->
+        <!-- Assessment Timing Info (fixed by Quarter) -->
         <div class="period-selector">
-          <label class="period-label">Assessment Period:</label>
-          <div class="period-options">
-            <a href="?tab=reading&reading_period=bosy" class="period-btn {% if selected_reading_period == 'bosy' %}active{% endif %}">
-              BOSY <span class="period-subtitle">(Q3 Report)</span>
-            </a>
-            <a href="?tab=reading&reading_period=mosy" class="period-btn {% if selected_reading_period == 'mosy' %}active{% endif %}">
-              MOSY <span class="period-subtitle">(Q4 Report)</span>
-            </a>
-            <a href="?tab=reading&reading_period=eosy" class="period-btn {% if selected_reading_period == 'eosy' %}active{% endif %}">
-              EOSY <span class="period-subtitle">(Q1 Report)</span>
-            </a>
+          <div class="period-options" style="gap:.5rem; align-items:center;">
+            <span class="period-btn active" style="pointer-events:none;">
+              {% if selected_reading_period == 'bosy' %}
+                BOSY Results - Quarter 2 or 3 Depends on what quarter was selected
+              {% elif selected_reading_period == 'mosy' %}
+                MOSY Results - Quarter 4
+              {% elif selected_reading_period == 'eosy' %}
+                EOSY Results - Quarter 1
+              {% else %}
+                {{ selected_reading_period|upper }} Results
+              {% endif %}
+            </span>
+            <span class="muted">Timing is fixed by quarter ({{ submission.period.quarter_tag }}).</span>
           </div>
         </div>
 
@@ -681,16 +1047,49 @@
                   <tbody>
                     <tr>
                       <td class="subject-label">Mother Tongue</td>
-                      {% if 1 in crla_grades %}<td>{{ form.mt_grade_1 }}</td>{% endif %}
-                      {% if 2 in crla_grades %}<td>{{ form.mt_grade_2 }}</td>{% endif %}
-                      {% if 3 in crla_grades %}<td>{{ form.mt_grade_3 }}</td>{% endif %}
+                      {% if 1 in crla_grades %}<td>
+                        {% if can_edit %}
+                          {{ form.mt_grade_1 }}
+                        {% else %}
+                          <input type="number" 
+                                 name="{{ form.mt_grade_1.name }}" 
+                                 id="{{ form.mt_grade_1.id_for_label }}"
+                                 value="{{ form.mt_grade_1.value|default:'' }}"
+                                 readonly
+                                 style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                        {% endif %}
+                      </td>{% endif %}
+                      {% if 2 in crla_grades %}<td>
+                        {% if can_edit %}
+                          {{ form.mt_grade_2 }}
+                        {% else %}
+                          <input type="number" 
+                                 name="{{ form.mt_grade_2.name }}" 
+                                 id="{{ form.mt_grade_2.id_for_label }}"
+                                 value="{{ form.mt_grade_2.value|default:'' }}"
+                                 readonly
+                                 style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                        {% endif %}
+                      </td>{% endif %}
+                      {% if 3 in crla_grades %}<td>
+                        {% if can_edit %}
+                          {{ form.mt_grade_3 }}
+                        {% else %}
+                          <input type="number" 
+                                 name="{{ form.mt_grade_3.name }}" 
+                                 id="{{ form.mt_grade_3.id_for_label }}"
+                                 value="{{ form.mt_grade_3.value|default:'' }}"
+                                 readonly
+                                 style="background-color: #f3f4f6; cursor: not-allowed; border: 1px solid #d1d5db;">
+                        {% endif %}
+                      </td>{% endif %}
                       <td class="total-cell">
                         <span class="total-value" data-total="mt">0</span>
                       </td>
                     </tr>
                     <tr>
                       <td class="subject-label">Filipino</td>
-                      {% if 1 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
+                      {% if 1 in crla_grades %}<td class="na-cell">&mdash;</td>{% endif %}
                       {% if 2 in crla_grades %}<td>{{ form.fil_grade_2 }}</td>{% endif %}
                       {% if 3 in crla_grades %}<td>{{ form.fil_grade_3 }}</td>{% endif %}
                       <td class="total-cell">
@@ -699,8 +1098,8 @@
                     </tr>
                     <tr>
                       <td class="subject-label">English</td>
-                      {% if 1 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
-                      {% if 2 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
+                      {% if 1 in crla_grades %}<td class="na-cell">&mdash;</td>{% endif %}
+                      {% if 2 in crla_grades %}<td class="na-cell">&mdash;</td>{% endif %}
                       {% if 3 in crla_grades %}<td>{{ form.eng_grade_3 }}</td>{% endif %}
                       <td class="total-cell">
                         <span class="total-value" data-total="eng">0</span>
@@ -848,20 +1247,31 @@
         </div>
         {% endif %}
 
-        <!-- INTERVENTIONS -->
-        <div class="assessment-section">
-          <h2 class="assessment-title">Interventions Developed Based on Assessment Results</h2>
-          
-          {{ reading_interventions_new_formset.management_form }}
-          
-          <div class="interventions-list">
-            {% for form in reading_interventions_new_formset %}
-              {{ form.id }}
-              {{ form.order }}
-              <div class="intervention-item">
-                <label class="intervention-label">{{ forloop.counter }}.</label>
-                <div class="intervention-input">
-                  {{ form.description }}
+        <!-- READING DIFFICULTIES & INTERVENTIONS (New Structured Builder) -->
+        <div class="assessment-section reading-difficulties-section">
+          <h2 class="assessment-title">Reading Difficulties & Targeted Interventions ({{ selected_reading_period|upper }})</h2>
+          <p class="help-text" style="margin:.5rem 0 1rem 0;color:#4b5563;font-size:.875rem;">List up to 5 priority reading difficulties per offered grade (Grades 1–10 only) and the specific intervention planned. Leave unused rows blank. Empty pairs are ignored when saving.</p>
+          <textarea name="reading_difficulties_json" class="reading-difficulties-storage" style="display:none;">{{ reading_difficulties_json_dump|default:'[]'|safe }}</textarea>
+          <div class="reading-difficulties-plan" style="display:flex;flex-direction:column;gap:1.5rem;">
+            {% for g in reading_grade_range %}
+              <div class="reading-difficulty-grade" data-grade="{{ g }}" style="border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;background:#ffffff;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+                  <h3 style="margin:0;font-size:1rem;font-weight:600;color:#374151;">Grade {{ g }}</h3>
+                  <span style="font-size:.75rem;color:#6b7280;">Top 5 Difficulties</span>
+                </div>
+                <div class="reading-difficulty-pairs" style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+                  {% for i in '12345' %}
+                    <div class="reading-difficulty-pair" data-index="{{ forloop.counter }}" style="display:contents;">
+                      <div style="display:flex;flex-direction:column;gap:.25rem;">
+                        <label style="font-size:.9rem;font-weight:600;color:#374151;">{{ forloop.counter }}. Difficulty</label>
+                        <textarea rows="2" class="form-textarea reading-difficulty-textarea" placeholder="e.g. Low decoding accuracy in Grade {{ g }}"></textarea>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:.25rem;">
+                        <label style="font-size:.9rem;font-weight:600;color:#374151;">Intervention</label>
+                        <textarea rows="2" class="form-textarea reading-intervention-textarea" placeholder="e.g. Daily guided reading groups focusing on phonics"></textarea>
+                      </div>
+                    </div>
+                  {% endfor %}
                 </div>
               </div>
             {% endfor %}
@@ -915,6 +1325,7 @@
                     <td>{{ form.transitioning_proficient }}</td>
                     <td>{{ form.at_grade_level }}</td>
                   </tr>
+                  {# Suppress RMA non_field_errors duplicate global banner; handled by row mismatch highlighting instead #}
                 {% endfor %}
               </tbody>
             </table>
@@ -959,6 +1370,7 @@
           <table class="data-table supervision-table">
             <thead>
               <tr>
+                <th>Total Number of Teachers</th>
                 <th>Number of Teachers Supervised, Observed and Provided TA</th>
                 <th>Intervention Support Provided</th>
                 <th>Result</th>
@@ -971,6 +1383,7 @@
               {% for form in supervision_formset %}
                 {{ form.id }}
                 <tr class="supervision-row">
+                  <td>{{ form.total_teachers }}</td>
                   <td>{{ form.teachers_supervised_observed_ta }}</td>
                   <td>{{ form.intervention_support_provided }}</td>
                   <td>{{ form.result }}</td>
@@ -1109,12 +1522,12 @@
                     </td>
                     <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: center;">
                       {% if adm_formset.can_delete and forloop.counter > 1 %}
-                        <label style="display: flex; align-items: center; justify-content: center; gap: 0.25rem; margin: 0; cursor: pointer;" class="adm-delete-control">
+                        <label class="adm-delete-control">
                           {{ form.DELETE }}
-                          <span class="adm-delete-text" style="font-size: 0.75rem; color: #dc2626;">Remove</span>
+                          <span class="adm-delete-text">Delete</span>
                         </label>
                       {% else %}
-                        <span style="font-size: 0.75rem; color: #9ca3af;">Ã¢â‚¬â€</span>
+                        <span style="font-size: 0.75rem; color: #9ca3af;">&mdash;</span>
                       {% endif %}
                     </td>
                   </tr>
@@ -1133,9 +1546,9 @@
                   <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_unobligated }}</td>
                   <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_percent_obligated }}</td>
                   <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align:center;">
-                    <label class="adm-delete-control" style="display:flex; align-items:center; justify-content:center; gap:0.25rem; margin:0; cursor:pointer;">
+                    <label class="adm-delete-control">
                       {{ form.DELETE }}
-                      <span class="adm-delete-text" style="font-size:0.75rem; color:#dc2626;">Remove</span>
+                      <span class="adm-delete-text">Delete</span>
                     </label>
                   </td>
                 </tr>
@@ -1194,9 +1607,6 @@
         {# Signatories Section #}
         <div class="section-card" style="margin-top: 2rem;">
           <div class="section-card__header">Signatories</div>
-          <div class="section-card__intro">
-            <p>Use the name/position that appears on the paper form.</p>
-          </div>
           
           {% if signatories_form.non_field_errors %}
           <div class="form-error">
@@ -1205,7 +1615,7 @@
           {% endif %}
 
           <div class="form-field">
-            <label class="form-label" for="{{ signatories_form.prepared_by.id_for_label }}">Name of the School Head</label>
+            <!-- Removed label as requested -->
             {{ signatories_form.prepared_by }}
             {% if signatories_form.prepared_by.errors %}
               <div class="form-error">
@@ -1236,11 +1646,72 @@
         </div>
       {% endif %}
 
+    <div id="activity-delete-bin" style="display:none"></div>
     </form>
     </div>
 
     <!-- Form navigation and validation script -->
     <script src="{% static 'js/submission-form.js' %}"></script>
+
+    <!-- SLP: Automatic hiding of unselected SHS specializations (client-side) -->
+    <script>
+      (function(){
+        // Parse JSON from context for SHS unselected strand prefixes
+        var SHS_UNSELECTED_PREFIXES = [];
+        try {
+          SHS_UNSELECTED_PREFIXES = JSON.parse('{{ shs_unselected_prefixes_json|escapejs }}');
+        } catch (e) {}
+        function applyUnselectedStrandHiding(){
+          var unselected = Array.isArray(SHS_UNSELECTED_PREFIXES) ? SHS_UNSELECTED_PREFIXES : [];
+          if (!unselected.length) return;
+          // Only for Grade 11/12 containers
+          var gradeAccordions = document.querySelectorAll('.grade-accordion');
+          gradeAccordions.forEach(function(ga){
+            var gradeLabel = ga.getAttribute('data-grade');
+            if (gradeLabel !== 'Grade 11' && gradeLabel !== 'Grade 12') return;
+            var container = ga.querySelector('.subjects-container');
+            if (!container) return;
+            container.querySelectorAll('.subject-accordion').forEach(function(acc){
+              var key = acc.getAttribute('data-subject-key') || '';
+              var matches = unselected.some(function(pref){ return pref && key.indexOf(pref) === 0; });
+              if (matches){
+                acc.style.display = 'none';
+              }
+            });
+            recalcGradeCompletionFor(ga);
+          });
+        }
+        function recalcGradeCompletionFor(gradeAccordion){
+          if (!gradeAccordion) return;
+          var container = gradeAccordion.querySelector('.subjects-container');
+          if (!container) return;
+          var rows = Array.prototype.slice.call(container.querySelectorAll('.subject-accordion'))
+            .filter(function(el){ return el.style.display !== 'none'; });
+          // Only count offered subjects in totals and completion
+          var offered = rows.filter(function(row){ return (row.getAttribute('data-offered') || 'true') !== 'false'; });
+          var total = offered.length;
+          var completed = 0;
+          offered.forEach(function(row){
+            var isComplete = !!row.querySelector('.status-badge.complete');
+            if (isComplete) completed += 1;
+          });
+          var pct = total ? Math.round((completed / total) * 100) : 0;
+          var stats = gradeAccordion.querySelector('.grade-stats');
+          if (stats){
+            var countEl = stats.querySelector('.subjects-count');
+            if (countEl) countEl.textContent = completed + '/' + total + ' subjects';
+            var bar = stats.querySelector('.completion-fill');
+            if (bar) bar.style.width = pct + '%';
+            var pctEl = stats.querySelector('.completion-percentage');
+            if (pctEl) pctEl.textContent = pct + '%';
+          }
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+          // Hide subjects belonging to SHS strands not selected in School Profile
+          applyUnselectedStrandHiding();
+        });
+      })();
+    </script>
 
     <!-- SLP Tests disabled for production -->
     {% comment %}
@@ -1252,6 +1723,14 @@
 
   </body>
 </html>
+
+
+
+
+
+
+
+
 
 
 

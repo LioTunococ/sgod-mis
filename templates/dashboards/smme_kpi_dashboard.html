@@ -1,0 +1,3028 @@
+{% extends "layout/base.html" %}
+{% load static %}
+{% load dashboard_filters %}
+
+{% block title %}SMME KPI Dashboard{% endblock %}
+
+{% block head_extra %}
+{% if show_analytics %}
+<!-- Chart.js for interactive visualizations (loaded only when analytics are shown) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+{% endif %}
+
+<style>
+    :root {
+        --bg: #f5f7fb;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --primary: #4f46e5;
+        --primary-600: #4338ca;
+        --primary-50: #eef2ff;
+        --accent: #06b6d4;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --radius: 10px;
+        --shadow: 0 8px 20px rgba(17, 24, 39, 0.08);
+    }
+
+    body { background: var(--bg); }
+
+    /* Clean Dashboard Styling */
+    .dashboard-container {
+        padding: 1.25rem 1.5rem 2rem;
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    .filters-section {
+        background: var(--panel);
+        border-radius: var(--radius);
+        padding: 1.25rem 1.25rem 1rem;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow);
+        position: relative;
+        border: 1px solid var(--border);
+        overflow: hidden; /* ensure accent bar never overlays content column */
+    }
+    /* Sidebar + sticky behavior moved to the sidebar container */
+    .sticky-filters { position: static; max-height: none; overflow: visible; backdrop-filter: none; }
+    .kpi-sidebar { position: sticky; top: 64px; height: calc(100vh - 84px); overflow: auto; z-index: 1; }
+    .kpi-content { position: relative; z-index: 2; }
+    .filters-section { width:100%; box-sizing: border-box; }
+    /* Two-column layout: sticky sidebar with filters */
+    .kpi-layout { display:grid; grid-template-columns: minmax(220px,260px) minmax(0,1fr); gap: 1.5rem; align-items:start; }
+    .kpi-sidebar { align-self:start; }
+    .kpi-content { min-width:0; position:relative; z-index:2; }
+    @media (max-width: 1024px) { .kpi-layout { grid-template-columns: 1fr; } }
+    /* Thin gradient accent on the left for a cooler card feel */
+    .filters-section::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        border-radius: var(--radius) 0 0 var(--radius);
+        background: linear-gradient(180deg, var(--primary), var(--accent));
+    }
+    /* Elevate when stuck (applied to sidebar in practice) */
+    .kpi-sidebar.is-stuck .filters-section { box-shadow: 0 10px 22px rgba(17,24,39,.10); border-color:#dbeafe; }
+    .kpi-sidebar.is-stuck .filters-section::before { background: linear-gradient(180deg, var(--accent), var(--primary)); }
+
+    .filter-grid {
+        display: grid;
+    /* Container-aware by default so it adapts inside the sidebar */
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem 1rem;
+        align-items: end;
+    }
+    /* Viewport breakpoints kept for wide main-content cases, but sidebar overrides below */
+    @media (min-width: 1440px) { .filter-grid { grid-template-columns: repeat(4, minmax(220px, 1fr)); } }
+    @media (max-width: 1200px) { .filter-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+    @media (max-width: 720px) { .filter-grid { grid-template-columns: 1fr; } }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-group label { font-weight: 700; margin-bottom: 0.4rem; color: #111827; }
+    .form-group label { text-transform: none; letter-spacing: .01em; font-size:.9rem; }
+    .form-group select {
+        appearance: none;
+        padding: .55rem .85rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: .92rem;
+        background: #fff url('data:image/svg+xml;utf8,<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M6 8l4 4 4-4" stroke="%236b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right .6rem center/16px 16px;
+        color: var(--text);
+        transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+
+    /* Lightweight layout helpers for filters */
+    .form-row--2 { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: end; }
+    .form-row--full { grid-column: 1 / -1; }
+    .filters-divider { grid-column: 1 / -1; height: 1px; background: var(--border); margin: .25rem 0 .5rem; }
+
+    /* Lightweight sub-section label inside filters */
+    .subtle-heading {
+        grid-column: 1 / -1;
+        font-size: .9rem;
+        font-weight: 700;
+        color: #374151;
+        letter-spacing: .02em;
+        margin-top: .25rem;
+        margin-bottom: .25rem;
+        opacity: .85;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%);
+        color: white;
+        padding: 0.55rem 1rem;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .btn-primary:hover { filter: brightness(1.05); }
+
+    /* Shared button refinements */
+    .btn { transition: transform .06s ease, box-shadow .2s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    /* Badge normalization */
+    .badge { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:999px; font-size:.75rem; font-weight:700; line-height:1; }
+
+    /* KPI Table Styling */
+    .kpi-table-section {
+        background: var(--panel);
+        border-radius: var(--radius);
+        padding: 1.25rem;
+        box-shadow: var(--shadow);
+        overflow-x: auto;
+    }
+
+    .kpi-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+
+    .kpi-table th {
+        background: #f8fafc;
+        padding: 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid var(--border);
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        box-shadow: 0 2px 6px rgba(17, 24, 39, 0.06);
+        background-image: radial-gradient(ellipse at bottom, rgba(79,70,229,.06), rgba(79,70,229,0) 70%);
+    }
+
+    .kpi-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle; /* keep rows visually balanced */
+    }
+    .kpi-table td.num { font-variant-numeric: tabular-nums; }
+
+    /* Sticky first column for readability */
+    .kpi-table th:first-child, .kpi-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 3; }
+    .kpi-table th:first-child { box-shadow: 1px 0 0 rgba(229,231,235,.9); }
+
+    /* Align numeric KPI columns to center */
+    .kpi-table th:nth-child(n+4), .kpi-table td:nth-child(n+4) { text-align: center; }
+
+    .kpi-table tbody tr:nth-child(even) {
+        background: #f9fbff;
+    }
+
+    .kpi-table tr:hover {
+        background: #f9fafb;
+        box-shadow: inset 4px 0 0 0 rgba(79,70,229,.25);
+    }
+
+    /* Scrollbar polish where supported */
+    .kpi-table-section::-webkit-scrollbar,
+    .sticky-filters::-webkit-scrollbar { height: 10px; width: 10px; }
+    .kpi-table-section::-webkit-scrollbar-thumb,
+    .sticky-filters::-webkit-scrollbar-thumb { background:#c7d2fe; border-radius:999px; }
+    .kpi-table-section::-webkit-scrollbar-track,
+    .sticky-filters::-webkit-scrollbar-track { background:#eef2ff; border-radius:999px; }
+
+    /* Bar Graph Cells */
+    .kpi-bar-cell {
+        position: relative;
+        background: #f1f5f9;
+        border-radius: 8px;
+        width: 120px;      /* unify KPI bar column width */
+        min-width: 120px;
+        height: 1.875rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .kpi-bar-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        border-radius: 8px;
+        transition: width .25s ease;
+    }
+
+    .kpi-bar-text {
+        position: relative;
+        z-index: 1;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+
+    /* Performance-based color schemes */
+    .kpi-bar-fill.performance-low { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+    .kpi-bar-fill.performance-medium { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
+    .kpi-bar-fill.performance-high { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+    
+    /* Fallback KPI type colors */
+    .kpi-implementation { background: linear-gradient(90deg, #34d399 0%, #10b981 100%); }
+    .kpi-slp { background: linear-gradient(90deg, #60a5fa 0%, #3b82f6 100%); }
+    .kpi-reading { background: linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%); }
+    /* Contextual SLP band colors */
+    .kpi-slp-dnme { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+    .kpi-slp-fs   { background: linear-gradient(90deg, #f97316 0%, #ea580c 100%); }
+    .kpi-slp-s    { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
+    .kpi-slp-vs   { background: linear-gradient(90deg, #84cc16 0%, #65a30d 100%); }
+    .kpi-slp-o    { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+    /* Contextual RMA band colors */
+    .kpi-rma-not    { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
+    .kpi-rma-low    { background: linear-gradient(90deg, #f97316 0%, #ea580c 100%); }
+    .kpi-rma-nearly { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
+    .kpi-rma-prof   { background: linear-gradient(90deg, #84cc16 0%, #65a30d 100%); }
+    .kpi-rma-agl    { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
+    .kpi-rma { background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%); }
+    .kpi-supervision { background: linear-gradient(90deg, #f87171 0%, #ef4444 100%); }
+    .kpi-adm { background: linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%); }
+
+    /* No data styling */
+    .no-data {
+        color: #6b7280;
+        font-style: italic;
+    }
+
+    .school-name {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .district-name {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    /* Summary section */
+    .summary-section {
+        background: var(--panel);
+        border-radius: var(--radius);
+        padding: 1.25rem;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow);
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+    }
+
+    .summary-card { text-align:center; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid var(--border); }
+
+    .summary-card h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .summary-card p {
+        color: #6b7280;
+        margin: 0.5rem 0 0 0;
+        font-size: 0.9rem;
+    }
+
+    /* Inline legend (lightweight) */
+    .legend-inline { display:flex; flex-wrap:wrap; gap:.5rem .75rem; align-items:center; color:#6b7280; font-size:.85rem; margin:.25rem 0 .5rem; }
+    .legend-inline .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.35rem; }
+    .legend-inline .sw.high { background:#10b981; }
+    .legend-inline .sw.med { background:#f59e0b; }
+    .legend-inline .sw.low { background:#ef4444; }
+
+    /* Quick search match highlight */
+    mark.q { background:#fef08a; color:#1f2937; padding:0 .1em; border-radius:2px; }
+
+    /* Enhanced Visual Components */
+    .visual-section {
+        background: var(--panel);
+        border-radius: var(--radius);
+        padding: 1.25rem;
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow);
+    }
+
+    .chart-container {
+        position: relative;
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+        height: 400px;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .chart-card { background: var(--panel); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+
+    .chart-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+
+    .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    /* Enhanced performance indicators */
+    .performance-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .performance-icon {
+        font-size: 1.2rem;
+    }
+
+    /* Animated progress bars */
+    .animated-progress {
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+        height: 8px;
+        margin: 0.5rem 0;
+    }
+
+    .animated-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #34d399);
+        transition: width 1s ease-in-out;
+        border-radius: 4px;
+    }
+
+    /* Group header styling (district grouping) */
+    .group-header td {
+        background: #f3f4f6;
+        font-weight: 700;
+        color: #374151;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 36px; /* stay below the header row */
+        z-index: 1;
+    }
+
+    /* Shimmer skeleton for AJAX loading */
+    .skeleton { padding: 1rem; }
+    .skeleton .shimmer-block {
+        height: 14px;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #eef2ff 0%, #f5f7fb 40%, #eef2ff 80%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s ease infinite;
+        margin: 10px 0;
+    }
+    .skeleton .shimmer-header { height: 18px; width: 40%; }
+    .skeleton .shimmer-wide { height: 12px; width: 100%; }
+    .skeleton .row-group { display:grid; grid-template-columns: 260px 1fr 120px 120px 120px; gap: 12px; align-items:center; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Quick search input enhancement */
+    .input--search {
+        background: #fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%236b7280" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"/></svg>') no-repeat 8px center/18px 18px;
+        padding-left: 34px !important;
+        transition: box-shadow .15s ease, border-color .15s ease;
+    }
+    .input--search:focus { outline:none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+
+    /* Filters toggle */
+    .filters-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+    .btn-toggle { display: none; }
+    .btn-sm { padding:.4rem .75rem; font-size:.9rem; }
+
+    /* Buttons (lightweight enhancement) */
+    .btn.btn--primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%); color:#fff; border:none; }
+    .btn.btn--primary:hover { filter: brightness(1.05); }
+    .btn.btn--secondary { background:#fff; border:1px solid var(--border); color:#1f2937; }
+    .btn.btn--secondary:hover { background:#f9fafb; }
+
+    /* Toolbar select (for filter column layout) */
+    .toolbar-select { padding:.35rem .6rem; border:1px solid var(--border); border-radius:8px; background:#fff; color:#374151; font-weight:600; }
+    .toolbar-select:focus { outline:none; box-shadow: 0 0 0 3px rgba(79,70,229,.15); border-color:#c7d2fe; }
+
+    /* Manual column overrides */
+    .filter-grid.cols-1 { grid-template-columns: 1fr !important; }
+    .filter-grid.cols-2 { grid-template-columns: repeat(2, minmax(220px,1fr)) !important; }
+    .filter-grid.cols-3 { grid-template-columns: repeat(3, minmax(220px,1fr)) !important; }
+    .filter-grid.cols-4 { grid-template-columns: repeat(4, minmax(220px,1fr)) !important; }
+
+    /* Ensure the sidebar version never squishes: default to single-column there.
+       Place after the generic rules so it wins by specificity and order. */
+    .kpi-sidebar .filter-grid { grid-template-columns: 1fr !important; grid-auto-flow: row; }
+    /* When set to 1 column, force each direct child to span full width */
+    .kpi-sidebar .filter-grid.cols-1 > * { grid-column: 1 / -1; }
+    /* Also treat the default (no explicit cols-*) as single-column */
+    .kpi-sidebar .filter-grid:not(.cols-2):not(.cols-3):not(.cols-4) > * { grid-column: 1 / -1; }
+    .kpi-sidebar .filter-grid > * { min-width: 0; }
+    .kpi-sidebar .filter-grid.cols-2 { grid-template-columns: repeat(2, minmax(220px,1fr)) !important; }
+    .kpi-sidebar .filter-grid.cols-3 { grid-template-columns: repeat(3, minmax(220px,1fr)) !important; }
+    .kpi-sidebar .filter-grid.cols-4 { grid-template-columns: repeat(4, minmax(220px,1fr)) !important; }
+
+    /* Switches */
+    .switch {
+        display: inline-flex; align-items: center; gap:.4rem; font-weight:600; color:#374151;
+    }
+    .switch input { width: 38px; height: 20px; appearance: none; background:#e5e7eb; border-radius:999px; position:relative; outline:none; cursor:pointer; transition:background .2s; }
+    .switch input:checked { background:#4f46e5; }
+    .switch input::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:left .2s; }
+    .switch input:checked::after { left:20px; }
+
+    /* Pill toggle (fallback-friendly) for toolbar switches */
+    .toggle-pill { position: relative; display:inline-flex; align-items:center; }
+    .toggle-pill input { position:absolute; opacity:0; pointer-events:none; }
+    .toggle-pill span { display:inline-block; padding:.35rem .7rem; border-radius:999px; border:1px solid var(--border); background:#fff; color:#374151; font-weight:600; }
+    .toggle-pill input:checked + span { background: var(--primary-50); color:#3730a3; border-color:#c7d2fe; }
+
+    /* Cards view */
+    .cards-controls { display:flex; gap:1rem; align-items:center; }
+    .cards-grid { display:none; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; }
+    .cards-grid.active { display:grid; }
+    .kpi-card { background:#ffffff; border:1px solid var(--border); border-radius:12px; padding:1rem; box-shadow: var(--shadow); }
+    .kpi-card h4 { margin:.25rem 0; font-size:1rem; color:#111827; }
+    .kpi-card .meta { color:#6b7280; font-size:.85rem; margin-bottom:.5rem; }
+    .kpi { display:flex; justify-content:space-between; align-items:center; margin:.35rem 0; font-weight:600; }
+    .kpi .bar { flex:1; height:8px; background:#e5e7eb; border-radius:999px; margin:0 .5rem; overflow:hidden; }
+    .kpi .bar span { display:block; height:100%; background:#3b82f6; }
+
+    /* KPI Part pill tabs */
+    .pill-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin: .5rem 0 0.75rem 0;
+        position: static; /* avoid clashing with sticky filters */
+        background: #fff;
+        padding-bottom: .5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .85rem;
+        border-radius: 999px;
+        background: #f3f4f6;
+        color: #374151;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        user-select: none;
+        font-weight: 600;
+        transition: all .15s ease;
+    }
+    .pill:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(17,24,39,.08); }
+    .pill.active { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%); color:#fff; border-color: transparent; }
+    .pill:focus { outline: none; box-shadow: 0 0 0 3px rgba(79,70,229,.25); }
+
+    /* Sorted column highlight */
+    .kpi-table th.sorted-col { background: #eef2ff; color:#1f2937; }
+    .kpi-table td.sorted-col { background: #f7f8ff; }
+
+    /* Density toggle: compact mode */
+    body.density-compact .kpi-table th { padding: .5rem .5rem; }
+    body.density-compact .kpi-table td { padding: .45rem .5rem; }
+    body.density-compact .filter-grid { gap: .5rem .75rem; }
+
+    /* Filter chips summary */
+    .chips { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
+    .chip { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; padding:.25rem .5rem; border-radius:999px; font-size:.8rem; }
+    .chip .x { margin-left:.25rem; opacity:.7; }
+
+    /* Sortable headers */
+    th.sortable { cursor: pointer; }
+    th.sortable .sort-indicator { margin-left:.35rem; font-size:.8rem; opacity:.7; }
+
+    /* Mobile: focus on key columns */
+    @media (max-width: 900px) {
+        .kpi-table th:nth-child(n+4), .kpi-table td:nth-child(n+4) { display: none; }
+        .kpi-table th:nth-child(1), .kpi-table td:nth-child(1) { min-width:180px; }
+        .kpi-table th:nth-child(2), .kpi-table td:nth-child(2) { min-width:120px; }
+        .kpi-table th:nth-child(3), .kpi-table td:nth-child(3) { min-width:90px; }
+    }
+
+    /* Density: single comfortable mode (compact removed per feedback) */
+</style>
+{% endblock %}
+
+{% block content %}
+{% include "includes/top_nav.html" %}
+
+<div class="dashboard-container">
+    <div class="page-heading">
+        <h1>SMME KPI Dashboard</h1>
+        <p class="subtitle">Simple table view with bar graph cells showing KPI performance across all sections</p>
+        {% if debug_perf %}
+        <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+            <span style="background:#eef2ff; color:#3730a3; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.85rem;">DEBUG</span>
+            <span style="color:#6b7280; font-size:0.9rem;">{{ debug_perf.query_count }} queries • {{ debug_perf.execution_time }}s</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Two‑pane layout: sidebar filters + content -->
+    <div class="kpi-layout">
+    <aside class="kpi-sidebar">
+    <div class="filters-section sticky-filters" id="filtersPanel">
+            <div class="filters-toolbar">
+                <h2 style="margin: 0; color: #1f2937;">Filters</h2>
+            </div>
+    <form method="GET" class="filter-grid filter-bar cols-1" id="filtersBody">
+            <!-- Basics -->
+            <div class="subtle-heading">Basics</div>
+            <div class="form-group">
+                <label for="school_year">School Year</label>
+                <select name="school_year" id="school_year">
+                    {% for year in school_years %}
+                        <option value="{{ year }}" {% if year|stringformat:"s" == selected_school_year %}selected{% endif %}>
+                            SY {{ year }}-{{ year|add:1 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="quarter">Quarter</label>
+                <select name="quarter" id="quarter">
+                    <option value="all" {% if selected_quarter == 'all' %}selected{% endif %}>All Quarters</option>
+                    <option value="Q1" {% if selected_quarter == 'Q1' %}selected{% endif %}>Quarter 1</option>
+                    <option value="Q2" {% if selected_quarter == 'Q2' %}selected{% endif %}>Quarter 2</option>
+                    <option value="Q3" {% if selected_quarter == 'Q3' %}selected{% endif %}>Quarter 3</option>
+                    <option value="Q4" {% if selected_quarter == 'Q4' %}selected{% endif %}>Quarter 4</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="kpi_part">KPI Part</label>
+                <select name="kpi_part" id="kpi_part">
+                    <option value="all" {% if selected_kpi_part == 'all' %}selected{% endif %}>All Parts</option>
+                    <option value="implementation" {% if selected_kpi_part == 'implementation' %}selected{% endif %}>% Implementation</option>
+                    <option value="slp" {% if selected_kpi_part == 'slp' %}selected{% endif %}>SLP % by Band</option>
+                    <option value="reading_crla" {% if selected_kpi_part == 'reading_crla' %}selected{% endif %}>Reading (CRLA)</option>
+                    <option value="reading_philiri" {% if selected_kpi_part == 'reading_philiri' %}selected{% endif %}>Reading (PHILIRI)</option>
+                    <option value="rma" {% if selected_kpi_part == 'rma' %}selected{% endif %}>RMA</option>
+                    <option value="supervision" {% if selected_kpi_part == 'supervision' %}selected{% endif %}>Instructional Supervision & TA</option>
+                    <option value="adm" {% if selected_kpi_part == 'adm' %}selected{% endif %}>ADM One-Stop-Shop & EiE</option>
+                </select>
+            </div>
+
+            <!-- Scope -->
+            <div class="subtle-heading">Scope</div>
+            {# SMEA Form filter removed as KPI Part already determines the scope #}
+
+            {% if sections %}<input type="hidden" name="section_code" id="section_code" value="{{ selected_section_code|default:'smme' }}">{% endif %}
+
+            <div class="form-group">
+                <label for="school_level">School Level</label>
+                <select name="school_level" id="school_level">
+                    <option value="all" {% if selected_school_level == 'all' %}selected{% endif %}>All Levels</option>
+                    <option value="elementary" {% if selected_school_level == 'elementary' %}selected{% endif %}>Elementary (K-6)</option>
+                    <option value="secondary" {% if selected_school_level == 'secondary' %}selected{% endif %}>Secondary (7-12)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="district">District</label>
+                <select name="district" id="district">
+                    <option value="all" {% if not selected_district or selected_district == 'all' %}selected{% endif %}>All Districts</option>
+                    {% for district in all_districts %}
+                        <option value="{{ district.id }}" {% if district.id|stringformat:"s" == selected_district %}selected{% endif %}>
+                            {{ district.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="school">School</label>
+                <select name="school" id="school">
+                    <option value="all" {% if not selected_school or selected_school == 'all' %}selected{% endif %}>All Schools</option>
+                    {% for school in all_schools %}
+                        <option value="{{ school.id }}" {% if school.id|stringformat:"s" == selected_school %}selected{% endif %}>
+                            {{ school.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+        <!-- Advanced Filters -->
+                    {% if is_reading_detail %}
+                    {# When reading is selected via split KPI parts, fix reading_type via hidden field.
+                       Timing is now derived from Quarter, so no separate Timing control. #}
+                    <input type="hidden" id="reading_type" name="reading_type" value="{% if is_reading_philiri_detail %}philiri{% else %}crla{% endif %}">
+                    {% elif is_implementation_detail %}
+            <div class="form-group">
+                <label for="impl_focus">% Implementation Focus</label>
+                <select name="impl_focus" id="impl_focus">
+                    <option value="access" {% if impl_focus == 'access' %}selected{% endif %}>Access</option>
+                    <option value="quality" {% if impl_focus == 'quality' %}selected{% endif %}>Quality</option>
+                    <option value="equity" {% if impl_focus == 'equity' %}selected{% endif %}>Equity</option>
+                    <option value="enabling" {% if impl_focus == 'enabling' %}selected{% endif %}>Enabling Mechanism</option>
+                </select>
+            </div>
+                    {% elif is_slp_detail %}
+            <div class="form-group">
+                <label for="subject">Subject</label>
+                <select name="subject" id="subject">
+                    <option value="all" {% if selected_subject == 'all' %}selected{% endif %}>All Subjects</option>
+                    {% for s in available_subjects %}
+                        <option value="{{ s.0 }}" {% if s.0 == selected_subject %}selected{% endif %}>{{ s.1|default:s.0 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Removed multi-select Subjects per request; keep single Subject filter only #}
+
+            <div class="form-group">
+                <label for="slp_mode">SLP View</label>
+                <select name="slp_mode" id="slp_mode">
+                    <option value="summary" {% if slp_mode != 'detail' %}selected{% endif %}>% by Band (Summary)</option>
+                    <option value="detail" {% if slp_mode == 'detail' %}selected{% endif %}>Subject Details</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="grade_range">Grade Level</label>
+                <select name="grade_range" id="grade_range">
+                    <option value="all" {% if selected_grade_range == 'all' %}selected{% endif %}>All Grades</option>
+                    {% for g in available_grades %}
+                        <option value="{{ g }}" {% if g == selected_grade_range %}selected{% endif %}>{{ g }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+                        {# Removed multi-select Grades and presets per request; keep single Grade Level filter only #}
+            {% endif %}
+
+            {% if is_rma_detail %}
+            <div class="form-group">
+                <label for="rma_grade">RMA Grade</label>
+                <select name="rma_grade" id="rma_grade">
+                    {% for value, label in rma_grade_choices %}
+                        <option value="{{ value }}" {% if rma_grade == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <!-- Sorting & Special toggles -->
+            <div class="filters-divider"></div>
+            <div class="subtle-heading">Ordering</div>
+            <div class="form-row--2">
+                <div class="form-group">
+                    <label for="sort_by">Sort By</label>
+                    <select name="sort_by" id="sort_by">
+                        {% for value, label in sort_options %}
+                            <option value="{{ value }}" {% if value == selected_sort_by %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sort_dir">Sort Direction</label>
+                    <select name="sort_dir" id="sort_dir">
+                        <option value="asc" {% if selected_sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+                        <option value="desc" {% if selected_sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="only_missing">Missing submissions</label>
+                <div class="switch">
+                    <input type="checkbox" id="only_missing" name="only_missing" value="1" {% if selected_only_missing %}checked{% endif %} {% if not missing_filter_applicable %}disabled title="Select a specific KPI Part and Quarter to enable"{% endif %}>
+                    <span>Show schools with no submission</span>
+                </div>
+            </div>
+
+        </form>
+    </aside>
+    <main class="kpi-content">
+
+        <!-- Active filter chips (quick glance) -->
+    <div class="chips" id="activeFilterChips" aria-label="Active filters">
+            {% if selected_form_template and selected_form_template != 'all' %}
+                <span class="chip">Form: {% for f in available_forms %}{% if f.code == selected_form_template %}{{ f.label }}{% endif %}{% endfor %}</span>
+            {% endif %}
+            {% if selected_school_year %}
+                <span class="chip">SY: {{ selected_school_year }}-{{ selected_school_year|add:1 }}</span>
+            {% endif %}
+            {% if selected_quarter and selected_quarter != 'all' %}
+                <span class="chip">Quarter: {{ selected_quarter }}</span>
+            {% endif %}
+            {% if selected_district and selected_district != 'all' %}
+                <span class="chip">District: {% for d in all_districts %}{% if d.id|stringformat:'s' == selected_district %}{{ d.name }}{% endif %}{% endfor %}</span>
+            {% endif %}
+            {% if selected_school and selected_school != 'all' %}
+                <span class="chip">School: {% for s in all_schools %}{% if s.id|stringformat:'s' == selected_school %}{{ s.name }}{% endif %}{% endfor %}</span>
+            {% endif %}
+            {% if selected_subjects and selected_subjects|length > 0 %}
+                <span class="chip">Subjects: {{ selected_subjects|join:', ' }}</span>
+            {% elif selected_subject and selected_subject != 'all' %}
+                <span class="chip">Subject: {{ selected_subject }}</span>
+            {% endif %}
+            {% if selected_kpi_part == 'implementation' and impl_focus %}
+                <span class="chip">Implementation Focus: {{ impl_focus|capfirst }}</span>
+            {% endif %}
+            {# Timing chip removed; timing derives from Quarter #}
+            {% if is_slp_detail %}
+                <span class="chip">SLP View: {% if slp_mode == 'detail' %}Subject Details{% else %}% by Band{% endif %}</span>
+            {% endif %}
+            {% if selected_grades and selected_grades|length > 0 %}
+                <span class="chip">Grades: {{ selected_grades|join:', ' }}</span>
+            {% elif selected_grade_range and selected_grade_range != 'all' %}
+                <span class="chip">Grade: {{ selected_grade_range }}</span>
+            {% endif %}
+            {% if selected_only_missing %}
+                <span class="chip" title="Only schools with no submitted/noted form for this quarter">
+                    Missing only{% if missing_count is not None %} ({{ missing_count }}){% endif %}
+                </span>
+            {% endif %}
+        </div>
+        
+        <!-- Export/Action Bar -->
+        <div class="export-bar" style="display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:.5rem 0 1rem;">
+            <div class="export-meta" style="color:#374151;">
+                {% if is_slp_detail %}
+                    {% if slp_mode == 'detail' %}
+                        Showing <strong id="export-schools-count">{{ slp_subject_data|length }}</strong> schools (subject detail)
+                    {% else %}
+                        Showing <strong id="export-schools-count">{{ slp_distribution_data|length }}</strong> schools (SLP summary)
+                    {% endif %}
+                {% else %}
+                    Showing <strong id="export-schools-count">{{ kpi_table_data|length }}</strong> schools
+                {% endif %}
+                {% if selected_only_missing and missing_count is not None %}
+                    • Missing only: <strong>{{ missing_count }}</strong>
+                {% endif %}
+                • Filters: <span id="activeFiltersCount">0</span>
+            </div>
+            <div class="export-actions" style="display:flex; gap:.5rem; align-items:center;">
+          <input id="quickSearch" type="text" placeholder="Quick search schools…" aria-label="Quick search"
+              class="input--search" style="padding:.45rem .6rem; border:1px solid #d1d5db; border-radius:8px; min-width: 240px;" />
+                <a id="exportCsvBtn"
+                   class="btn btn--primary"
+                   href="{% url 'smme_kpi_export' %}?{% if request.GET %}{{ request.GET.urlencode }}{% endif %}"
+                   title="Export current view as CSV{% if not kpi_table_data and not is_slp_detail %} (no rows){% endif %}">
+                    Export CSV
+                </a>
+                <button type="button" id="openLegendBtn" class="btn btn--secondary" title="Show legend and glossary">Legend</button>
+                <a class="btn btn--secondary" href="{% url 'smme_kpi_dashboard' %}">Reset</a>
+            </div>
+        </div>
+
+    {% if selected_only_missing %}
+    <div class="alert" style="margin: 0 0 1rem 0; padding: .75rem 1rem; background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 6px;">
+        Showing schools with no submission for
+        <strong>
+            {% if selected_form_template and selected_form_template != 'all' %}
+                {% for f in available_forms %}{% if f.code == selected_form_template %}{{ f.label }}{% endif %}{% endfor %}
+            {% else %}
+                selected KPI Part
+            {% endif %}
+        </strong>
+        in SY {{ selected_school_year }}-{{ selected_school_year|add:1 }}
+        {% if selected_quarter and selected_quarter != 'all' %}{{ selected_quarter }}{% endif %}.
+        {% if missing_count is not None %} Found <strong>{{ missing_count }}</strong> missing school{{ missing_count|pluralize }} in current scope.{% endif %}
+    </div>
+    {% if kpi_table_data|length == 0 %}
+    <div class="alert" style="margin: 0 0 1rem 0; padding: .75rem 1rem; background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; border-radius: 6px;">
+        No schools are missing a submission for the selected filters.
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Enhanced Visual Analytics (for non-SLP detail view) -->
+    {% if not is_slp_detail and kpi_table_data and show_analytics %}
+    <div class="visual-section">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+            <h2 style="margin: 0; color: #1f2937;">📈 Performance Analytics</h2>
+            <div style="display:flex; align-items:center; gap:.5rem;">
+                <label for="graph_school_year" style="font-weight:600; color:#374151;">Graph School Year</label>
+                <select id="graph_school_year" name="graph_school_year" style="padding:.35rem .5rem; border:1px solid #d1d5db; border-radius:4px;">
+                    {% for year in school_years %}
+                        <option value="{{ year }}" {% if year|stringformat:'s' == graph_school_year %}selected{% endif %}>SY {{ year }}-{{ year|add:1 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <!-- Summary Statistics -->
+        <div class="summary-stats">
+            <div class="stat-card">
+                <div class="stat-value">{{ kpi_table_data|length }}</div>
+                <div class="stat-label">Total Schools</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="stat-value" id="avg-performance">0%</div>
+                <div class="stat-label">Avg SLP Performance</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="stat-value" id="high-performers">0</div>
+                <div class="stat-label">High Performers (75%+)</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                <div class="stat-value" id="schools-with-data">{{ kpi_table_data|length }}</div>
+                <div class="stat-label">Schools with Data</div>
+            </div>
+        </div>
+
+        <!-- Interactive Charts -->
+        <div class="chart-grid">
+            <div class="chart-card" style="grid-column: 1 / -1;">
+                <div class="chart-title">SLP Band Trends by Quarter (SY {{ graph_school_year }}-{{ graph_school_year|add:1 }})</div>
+                <div class="chart-container">
+                    <canvas id="slpTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Summary Section -->
+    <div class="summary-section">
+        <h2 style="margin-top: 0; color: #1f2937;">Summary</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>
+                    {% if is_slp_detail %}
+                        {% if slp_mode == 'detail' %}
+                            {{ slp_subject_data|length }}
+                        {% else %}
+                            {{ slp_distribution_data|length }}
+                        {% endif %}
+                    {% else %}
+                        {{ kpi_table_data|length }}
+                    {% endif %}
+                </h3>
+                <p>Schools</p>
+            </div>
+            <div class="summary-card">
+                <h3>
+                    {% if is_slp_detail %}
+                        {% if slp_mode == 'detail' %}
+                            {{ slp_subject_data|length|floatformat:0 }}
+                        {% else %}
+                            {{ slp_distribution_data|length|floatformat:0 }}
+                        {% endif %}
+                    {% else %}
+                        {{ kpi_table_data|length|floatformat:0 }}
+                    {% endif %}
+                </h3>
+                <p>Data Points</p>
+            </div>
+            <div class="summary-card">
+                <h3>{{ periods|length }}</h3>
+                <p>Period{{ periods|length|pluralize }}</p>
+            </div>
+            <div class="summary-card">
+                <h3>{{ selected_school_year }}</h3>
+                <p>School Year</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Table Section -->
+    <div class="kpi-table-section">
+        <!-- Client-rendered (AJAX) container -->
+        <div id="clientRenderedContent" style="display:none;"></div>
+        <div id="ajaxLoader" style="display:none;">
+            <div class="skeleton">
+                <div class="shimmer-block shimmer-header" style="width: 200px;"></div>
+                <div class="row-group" aria-hidden="true">
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                </div>
+                <div class="row-group" aria-hidden="true">
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                </div>
+                <div class="row-group" aria-hidden="true">
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block shimmer-wide"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                    <div class="shimmer-block" style="width:100%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Server-rendered fallback content wrapper -->
+        <div id="serverRenderedContent">
+            {% if is_slp_detail and slp_mode == 'detail' %}
+            <h2 style="margin-top: 0; color: #1f2937;">SLP Subject-Level Analysis</h2>
+            <p style="color: #6b7280; margin-bottom: .75rem;">Per-subject proficiency per school. Bands: DNME, FS, S, VS, O.</p>
+
+            {% if slp_subject_data %}
+                {% if selected_sort_by == 'district' %}
+                    {% regroup slp_subject_data by district as slp_groups %}
+                    {% for school_data in slp_groups %}
+                        <div style="background:#eef2ff; color:#1f2937; padding:.5rem .75rem; margin:1rem 0; border-radius:6px; border-left:4px solid #6366f1; font-weight:600;">District: {{ school_data.grouper }}</div>
+                        {% for sd in school_data.list %}
+                            <div style="background: #f9fafb; padding: 1.5rem; margin-bottom: 2rem; border-radius: 8px; border-left: 4px solid #2563eb;">
+                                <h3 style="margin: 0 0 0.5rem 0; color: #1f2937;">{{ sd.school.name }}</h3>
+                                <p style="color: #6b7280; margin: 0 0 1rem 0;">District: {{ sd.district }} | Level: {{ sd.school_level }} | Subjects: {{ sd.total_subjects }}</p>
+                                <div style="overflow-x: auto;">
+                                    <table class="kpi-table" style="margin:0;">
+                                        <thead>
+                                            <tr>
+                                                <th class="sortable" data-sort="subject_name">Subject</th>
+                                                <th>Grade Levels</th>
+                                                <th class="sortable" data-sort="enrollment">Total Enrolment</th>
+                                                <th>Proficient Students</th>
+                                                <th class="sortable" data-sort="subject_proficiency">Proficiency Rate</th>
+                                                <th>DNME Count</th>
+                                                <th>DNME Rate</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for subject in sd.subjects %}
+                                            <tr>
+                                                <td><strong>{{ subject.subject }}</strong></td>
+                                                <td><small>{{ subject.grade_levels }}</small></td>
+                                                <td>{{ subject.enrolment }}</td>
+                                                <td>{{ subject.proficient_count }}</td>
+                                                <td>
+                                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill {{ subject.performance_class }}" style="width: {{ subject.proficiency_rate }}%"></div><span class="kpi-bar-text">{{ subject.proficiency_rate }}%</span></div>
+                                                </td>
+                                                <td>{{ subject.dnme_count }}</td>
+                                                <td>
+                                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-low" style="width: {{ subject.dnme_rate }}%"></div><span class="kpi-bar-text">{{ subject.dnme_rate }}%</span></div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endfor %}
+                {% else %}
+                    {% for sd in slp_subject_data %}
+                    <div style="background: #f9fafb; padding: 1.5rem; margin-bottom: 2rem; border-radius: 8px; border-left: 4px solid #2563eb;">
+                        <h3 style="margin: 0 0 0.5rem 0; color: #1f2937;">{{ sd.school.name }}</h3>
+                        <p style="color: #6b7280; margin: 0 0 1rem 0;">District: {{ sd.district }} | Level: {{ sd.school_level }} | Subjects: {{ sd.total_subjects }}</p>
+                        <div style="overflow-x:auto;">
+                            <table class="kpi-table" style="margin:0;">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="subject_name">Subject</th>
+                                        <th>Grade Levels</th>
+                                        <th class="sortable" data-sort="enrollment">Total Enrolment</th>
+                                        <th>Proficient Students</th>
+                                        <th class="sortable" data-sort="subject_proficiency">Proficiency Rate</th>
+                                        <th>DNME Count</th>
+                                        <th>DNME Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for subject in sd.subjects %}
+                                    <tr>
+                                        <td><strong>{{ subject.subject }}</strong></td>
+                                        <td><small>{{ subject.grade_levels }}</small></td>
+                                        <td>{{ subject.enrolment }}</td>
+                                        <td>{{ subject.proficient_count }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill {{ subject.performance_class }}" style="width: {{ subject.proficiency_rate }}%"></div><span class="kpi-bar-text">{{ subject.proficiency_rate }}%</span></div>
+                                        </td>
+                                        <td>{{ subject.dnme_count }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-low" style="width: {{ subject.dnme_rate }}%"></div><span class="kpi-bar-text">{{ subject.dnme_rate }}%</span></div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            {% else %}
+                <div style="text-align:center; color:#6b7280; padding:2rem;">No subject-level SLP data for the selected filters.</div>
+            {% endif %}
+            {% else %}
+            {% if is_slp_detail %}
+            <h2 style="margin-top: 0; color: #1f2937;">SLP School-Level Distribution</h2>
+            <p style="color: #6b7280; margin-bottom: .75rem;">Per-school percentages by band: DNME, FS, S, VS, O.</p>
+            <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                <span style="font-weight:700; color:#374151;">Legend:</span>
+                <span class="chip" style="background:#fee2e2; color:#b91c1c; border-color:#fecaca;">DNME</span>
+                <span class="chip" style="background:#ffedd5; color:#c2410c; border-color:#fed7aa;">FS</span>
+                <span class="chip" style="background:#fef9c3; color:#a16207; border-color:#fde68a;">S</span>
+                <span class="chip" style="background:#ecfccb; color:#3f6212; border-color:#d9f99d;">VS</span>
+                <span class="chip" style="background:#dbeafe; color:#1d4ed8; border-color:#bfdbfe;">O</span>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="school_name">School
+                                {% if selected_sort_by == 'school_name' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="district">District
+                                {% if selected_sort_by == 'district' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="dnme" title="DNME %">DNME %
+                                {% if selected_sort_by == 'dnme' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="fs" title="FS %">FS %
+                                {% if selected_sort_by == 'fs' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="s" title="S %">S %
+                                {% if selected_sort_by == 's' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="vs" title="VS %">VS %
+                                {% if selected_sort_by == 'vs' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="o" title="O %">O %
+                                {% if selected_sort_by == 'o' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="enrollment">Enrollment
+                                {% if selected_sort_by == 'enrollment' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if slp_distribution_data %}
+                                                                {% regroup slp_distribution_data by district as slp_groups %}
+                                                                {% for group in slp_groups %}
+                                                                        <tr class="group-header"><td colspan="8">District: {{ group.grouper }}</td></tr>
+                                                                        {% with avg=slp_district_averages|get_item:group.grouper %}
+                                                                            {% if avg %}
+                                                                            <tr>
+                                                                                <td style="font-weight:700; color:#111827;">District average</td>
+                                                                                <td class="district-name">{{ group.grouper }}</td>
+                                                                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-dnme" style="width: {{ avg.dnme_pct }}%"></div><span class="kpi-bar-text">{{ avg.dnme_pct }}%</span></div></td>
+                                                                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-fs" style="width: {{ avg.fs_pct }}%"></div><span class="kpi-bar-text">{{ avg.fs_pct }}%</span></div></td>
+                                                                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-s" style="width: {{ avg.s_pct }}%"></div><span class="kpi-bar-text">{{ avg.s_pct }}%</span></div></td>
+                                                                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-vs" style="width: {{ avg.vs_pct }}%"></div><span class="kpi-bar-text">{{ avg.vs_pct }}%</span></div></td>
+                                                                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-o" style="width: {{ avg.o_pct }}%"></div><span class="kpi-bar-text">{{ avg.o_pct }}%</span></div></td>
+                                                                                <td>{{ avg.enrolment }}</td>
+                                                                            </tr>
+                                                                            {% endif %}
+                                                                        {% endwith %}
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-dnme" style="width: {{ row.dnme_pct }}%"></div><span class="kpi-bar-text">{{ row.dnme_pct }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-fs" style="width: {{ row.fs_pct }}%"></div><span class="kpi-bar-text">{{ row.fs_pct }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-s" style="width: {{ row.s_pct }}%"></div><span class="kpi-bar-text">{{ row.s_pct }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-vs" style="width: {{ row.vs_pct }}%"></div><span class="kpi-bar-text">{{ row.vs_pct }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-o" style="width: {{ row.o_pct }}%"></div><span class="kpi-bar-text">{{ row.o_pct }}%</span></div></td>
+                                        <td>{{ row.enrolment }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No SLP data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in slp_distribution_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-dnme" style="width: {{ row.dnme_pct }}%"></div><span class="kpi-bar-text">{{ row.dnme_pct }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-fs" style="width: {{ row.fs_pct }}%"></div><span class="kpi-bar-text">{{ row.fs_pct }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-s" style="width: {{ row.s_pct }}%"></div><span class="kpi-bar-text">{{ row.s_pct }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-vs" style="width: {{ row.vs_pct }}%"></div><span class="kpi-bar-text">{{ row.vs_pct }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-o" style="width: {{ row.o_pct }}%"></div><span class="kpi-bar-text">{{ row.o_pct }}%</span></div></td>
+                                <td>{{ row.enrolment }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No SLP data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% elif is_reading_detail %}
+                {% if reading_type == 'crla' %}
+                <h3>Reading Detail — CRLA</h3>
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>District</th>
+                            <th class="sortable" data-sort="low_emerging" title="Low Emerging %">Low Emerging %
+                                {% if selected_sort_by == 'low_emerging' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="high_emerging" title="High Emerging %">High Emerging %
+                                {% if selected_sort_by == 'high_emerging' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="developing" title="Developing %">Developing %
+                                {% if selected_sort_by == 'developing' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="transitioning" title="Transitioning %">Transitioning %
+                                {% if selected_sort_by == 'transitioning' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if reading_detail_data %}
+                                {% regroup reading_detail_data by district as reading_groups %}
+                                {% for group in reading_groups %}
+                                    <tr class="group-header"><td colspan="6" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-low" style="width: {{ row.low_emerging_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.low_emerging_pct }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-nearly" style="width: {{ row.high_emerging_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.high_emerging_pct }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-prof" style="width: {{ row.developing_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.developing_pct }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-agl" style="width: {{ row.transitioning_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.transitioning_pct }}%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="6" style="text-align:center; color:#6b7280; padding:2rem;">No CRLA data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in reading_detail_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-low" style="width: {{ row.low_emerging_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.low_emerging_pct }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-nearly" style="width: {{ row.high_emerging_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.high_emerging_pct }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-prof" style="width: {{ row.developing_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.developing_pct }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-agl" style="width: {{ row.transitioning_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.transitioning_pct }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" style="text-align:center; color:#6b7280; padding:2rem;">No CRLA data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% else %}
+                <h3>Reading Detail — PHILIRI</h3>
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>District</th>
+                            <th class="sortable" data-sort="frustration" title="Frustration %">Frustration %
+                                {% if selected_sort_by == 'frustration' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="instructional" title="Instructional %">Instructional %
+                                {% if selected_sort_by == 'instructional' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="independent" title="Independent %">Independent %
+                                {% if selected_sort_by == 'independent' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if reading_detail_data %}
+                                {% regroup reading_detail_data by district as reading_groups %}
+                                {% for group in reading_groups %}
+                                    <tr class="group-header"><td colspan="5" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-low" style="width: {{ row.frustration_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.frustration_pct }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-nearly" style="width: {{ row.instructional_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.instructional_pct }}%</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill kpi-rma-agl" style="width: {{ row.independent_pct }}%"></div>
+                                                <span class="kpi-bar-text">{{ row.independent_pct }}%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="5" style="text-align:center; color:#6b7280; padding:2rem;">No PHILIRI data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in reading_detail_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-low" style="width: {{ row.frustration_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.frustration_pct }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-nearly" style="width: {{ row.instructional_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.instructional_pct }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell">
+                                        <div class="kpi-bar-fill kpi-rma-agl" style="width: {{ row.independent_pct }}%"></div>
+                                        <span class="kpi-bar-text">{{ row.independent_pct }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" style="text-align:center; color:#6b7280; padding:2rem;">No PHILIRI data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% endif %}
+            {% elif is_rma_detail %}
+            <h2 style="margin-top: 0; color: #1f2937;">📊 RMA Per-Grade Distribution</h2>
+            <p style="color: #6b7280; margin-bottom: 1.5rem;">Percentages per band are computed against each grade-level enrolment for the selected school year and period(s).</p>
+            <div style="overflow-x: auto;">
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>District</th>
+                            <th>Grade</th>
+                            <th>Not Proficient (&lt;25%)</th>
+                            <th>Low Proficient (25–49%)</th>
+                            <th>Nearly Proficient (50–74%)</th>
+                            <th>Proficient (75–84%)</th>
+                            <th>At Grade Level (&ge;85%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if rma_detail_data %}
+                                {% regroup rma_detail_data by district as rma_groups %}
+                                {% for group in rma_groups %}
+                                    <tr class="group-header"><td colspan="8" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td>{{ row.grade_label|upper }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-low" style="width: {{ row.not_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.not_proficient_pct }}%</span></div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-medium" style="width: {{ row.low_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.low_proficient_pct }}%</span></div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-medium" style="width: {{ row.nearly_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.nearly_proficient_pct }}%</span></div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.proficient_pct }}%</span></div>
+                                        </td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.at_grade_level_pct }}%"></div><span class="kpi-bar-text">{{ row.at_grade_level_pct }}%</span></div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No RMA data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in rma_detail_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td>{{ row.grade_label|upper }}</td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-low" style="width: {{ row.not_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.not_proficient_pct }}%</span></div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-medium" style="width: {{ row.low_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.low_proficient_pct }}%</span></div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-medium" style="width: {{ row.nearly_proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.nearly_proficient_pct }}%</span></div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.proficient_pct }}%"></div><span class="kpi-bar-text">{{ row.proficient_pct }}%</span></div>
+                                </td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.at_grade_level_pct }}%"></div><span class="kpi-bar-text">{{ row.at_grade_level_pct }}%</span></div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No RMA data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif is_supervision_detail %}
+            <h2 style="margin-top: 0; color: #1f2937;">👩‍🏫 Instructional Supervision & TA</h2>
+            <p style="color: #6b7280; margin-bottom: 1.5rem;">Shows total teachers, number supervised/observed and provided TA, and the percentage provided TA per school.</p>
+            <div style="overflow-x: auto;">
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>District</th>
+                            <th>Total Teachers</th>
+                            <th>Teachers Supervised/Observed & TA</th>
+                            <th>% Provided TA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if supervision_detail_data %}
+                                {% regroup supervision_detail_data by district as sup_groups %}
+                                {% for group in sup_groups %}
+                                    <tr class="group-header"><td colspan="5" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td>{{ row.total_teachers }}</td>
+                                        <td>{{ row.teachers_supervised_ta }}</td>
+                                        <td>
+                                            <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.percent_ta }}%"></div><span class="kpi-bar-text">{{ row.percent_ta }}%</span></div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="5" style="text-align:center; color:#6b7280; padding:2rem;">No supervision data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in supervision_detail_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td>{{ row.total_teachers }}</td>
+                                <td>{{ row.teachers_supervised_ta }}</td>
+                                <td>
+                                    <div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.percent_ta }}%"></div><span class="kpi-bar-text">{{ row.percent_ta }}%</span></div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="5" style="text-align:center; color:#6b7280; padding:2rem;">No supervision data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif is_adm_detail %}
+            <h2 style="margin-top: 0; color: #1f2937;">🏫 ADM One-Stop-Shop & EiE</h2>
+            <p style="color: #6b7280; margin-bottom: 1.5rem;">Per-school ADM implementation: whether ADM is offered, number of programs (rows), average physical accomplishment %, average funds utilization %, and overall ADM %.</p>
+            <div style="overflow-x: auto;">
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>District</th>
+                            <th>Offers ADM</th>
+                            <th>Programs</th>
+                            <th>Physical %</th>
+                            <th>Funds %</th>
+                            <th>Overall ADM %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if selected_sort_by == 'district' %}
+                            {% if adm_detail_data %}
+                                {% regroup adm_detail_data by district as adm_groups %}
+                                {% for group in adm_groups %}
+                                    <tr class="group-header"><td colspan="7" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                    {% for row in group.list %}
+                                    <tr>
+                                        <td class="school-name">{{ row.school.name }}</td>
+                                        <td class="district-name">{{ row.district }}</td>
+                                        <td>{% if row.offers_adm %}<span class="badge" style="background:#10b981; color:#fff;">Yes</span>{% else %}<span class="badge" style="background:#6b7280; color:#fff;">No</span>{% endif %}</td>
+                                        <td>{{ row.program_count }}</td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.physical_avg }}%"></div><span class="kpi-bar-text">{{ row.physical_avg }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.funds_avg }}%"></div><span class="kpi-bar-text">{{ row.funds_avg }}%</span></div></td>
+                                        <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.overall_adm }}%"></div><span class="kpi-bar-text">{{ row.overall_adm }}%</span></div></td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="7" style="text-align:center; color:#6b7280; padding:2rem;">No ADM data for selected filters.</td></tr>
+                            {% endif %}
+                        {% else %}
+                            {% for row in adm_detail_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td>{% if row.offers_adm %}<span class="badge" style="background:#10b981; color:#fff;">Yes</span>{% else %}<span class="badge" style="background:#6b7280; color:#fff;">No</span>{% endif %}</td>
+                                <td>{{ row.program_count }}</td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.physical_avg }}%"></div><span class="kpi-bar-text">{{ row.physical_avg }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.funds_avg }}%"></div><span class="kpi-bar-text">{{ row.funds_avg }}%</span></div></td>
+                                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" style="width: {{ row.overall_adm }}%"></div><span class="kpi-bar-text">{{ row.overall_adm }}%</span></div></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="7" style="text-align:center; color:#6b7280; padding:2rem;">No ADM data for selected filters.</td></tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <h2 style="margin-top: 0; color: #1f2937;">SMME KPI Performance Table</h2>
+            <div style="overflow-x: auto;">
+                <table class="kpi-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-sort="school_name">School
+                                {% if selected_sort_by == 'school_name' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" data-sort="district">District
+                                {% if selected_sort_by == 'district' %}
+                                    <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th>Level</th>
+                            {% if selected_kpi_part == 'all' %}
+                                <th class="sortable" data-sort="implementation">% Implementation
+                                    {% if selected_sort_by == 'implementation' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                            {% elif selected_kpi_part == 'implementation' %}
+                                <th class="sortable" data-sort="implementation">% Implementation
+                                    {% if selected_sort_by == 'implementation' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="impl_access" title="Access %">Access
+                                    {% if selected_sort_by == 'impl_access' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="impl_quality" title="Quality %">Quality
+                                    {% if selected_sort_by == 'impl_quality' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="impl_equity" title="Equity %">Equity
+                                    {% if selected_sort_by == 'impl_equity' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="impl_enabling" title="Enabling Mechanisms %">Enabling
+                                    {% if selected_sort_by == 'impl_enabling' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                            {% endif %}
+                            {% if selected_kpi_part == 'all' or selected_kpi_part == 'slp' %}
+                                <th class="sortable" data-sort="performance" title="School Learning Program overall performance">SLP
+                                    {% if selected_sort_by == 'performance' %}
+                                        <span class="sort-indicator">{% if selected_sort_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                            {% endif %}
+                            {% if selected_kpi_part == 'all' or selected_kpi_part == 'reading' or selected_kpi_part == 'reading_crla' or selected_kpi_part == 'reading_philiri' %}
+                                <th title="Comprehensive Rapid Literacy Assessment">Reading (CRLA)</th>
+                                <th title="Philippine Informal Reading Inventory">Reading (PHILIRI)</th>
+                            {% endif %}
+                            {% if selected_kpi_part == 'all' or selected_kpi_part == 'rma' %}
+                                <th title="Remedial Math Assessment">RMA</th>
+                            {% endif %}
+                            {% if selected_kpi_part == 'all' or selected_kpi_part == 'supervision' %}
+                                <th title="Instructional Supervision and Technical Assistance">Supervision & TA</th>
+                            {% endif %}
+                            {% if selected_kpi_part == 'all' or selected_kpi_part == 'adm' %}
+                                <th title="Alternative Delivery Modes & Education in Emergencies">ADM & EiE</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% if selected_sort_by == 'district' %}
+                        {% if kpi_table_data %}
+                            {% regroup kpi_table_data by district as kpi_groups %}
+                            {% for group in kpi_groups %}
+                                <tr class="group-header"><td colspan="{% if selected_kpi_part == 'all' %}10{% elif selected_kpi_part == 'implementation' %}8{% elif selected_kpi_part == 'reading' %}5{% else %}4{% endif %}" style="background:#f3f4f6; font-weight:600; color:#374151;">District: {{ group.grouper }}</td></tr>
+                                {% for row in group.list %}
+                                <tr>
+                                    <td class="school-name">{{ row.school.name }}</td>
+                                    <td class="district-name">{{ row.district }}</td>
+                                    <td class="school-level">
+                                        <span class="badge" style="background: {% if row.school_level == 'Elementary' %}#10b981{% elif row.school_level == 'Secondary' %}#3b82f6{% else %}#6b7280{% endif %}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
+                                            {{ row.school_level }}
+                                        </span>
+                                    </td>
+                                    
+                                    {% if selected_kpi_part == 'all' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Overall Implementation">
+                                                    <div class="kpi-bar-fill {{ row.implementation_class }}" style="width: {{ row.implementation }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.implementation }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% elif selected_kpi_part == 'implementation' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Overall Implementation">
+                                                    <div class="kpi-bar-fill {{ row.implementation_class }}" style="width: {{ row.implementation }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.implementation }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Access">
+                                                    <div class="kpi-bar-fill {{ row.impl_access_class }}" style="width: {{ row.impl_access }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.impl_access }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Quality">
+                                                    <div class="kpi-bar-fill {{ row.impl_quality_class }}" style="width: {{ row.impl_quality }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.impl_quality }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Equity">
+                                                    <div class="kpi-bar-fill {{ row.impl_equity_class }}" style="width: {{ row.impl_equity }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.impl_equity }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell" title="Enabling Mechanisms">
+                                                    <div class="kpi-bar-fill {{ row.impl_enabling_class }}" style="width: {{ row.impl_enabling }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.impl_enabling }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+
+                                    {% if selected_kpi_part == 'all' or selected_kpi_part == 'slp' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.slp_class }}" style="width: {{ row.slp }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.slp }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+
+                                    {% if selected_kpi_part == 'all' or selected_kpi_part == 'reading' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.reading_crla_class }}" style="width: {{ row.reading_crla }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.reading_crla }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.reading_philiri_class }}" style="width: {{ row.reading_philiri }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.reading_philiri }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+
+                                    {% if selected_kpi_part == 'all' or selected_kpi_part == 'rma' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.rma_class }}" style="width: {{ row.rma }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.rma }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+
+                                    {% if selected_kpi_part == 'all' or selected_kpi_part == 'supervision' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.supervision_class }}" style="width: {{ row.supervision }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.supervision }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+
+                                    {% if selected_kpi_part == 'all' or selected_kpi_part == 'adm' %}
+                                        <td>
+                                            {% if row.has_data %}
+                                                <div class="kpi-bar-cell">
+                                                    <div class="kpi-bar-fill {{ row.adm_class }}" style="width: {{ row.adm }}%;"></div>
+                                                    <span class="kpi-bar-text">{{ row.adm }}%</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="no-data">No data</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" style="text-align: center; color: #6b7280; padding: 2rem;">No data available for the selected filters. <a href="{% url 'smme_kpi_dashboard' %}">Clear filters</a></td>
+                            </tr>
+                        {% endif %}
+                    {% else %}
+                        {% for row in kpi_table_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td class="school-level">
+                                    <span class="badge" style="background: {% if row.school_level == 'Elementary' %}#10b981{% elif row.school_level == 'Secondary' %}#3b82f6{% else %}#6b7280{% endif %}; color: white; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">
+                                        {{ row.school_level }}
+                                    </span>
+                                </td>
+                                
+                                {% if selected_kpi_part == 'all' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Overall Implementation">
+                                                <div class="kpi-bar-fill {{ row.implementation_class }}" style="width: {{ row.implementation }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.implementation }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% elif selected_kpi_part == 'implementation' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Overall Implementation">
+                                                <div class="kpi-bar-fill {{ row.implementation_class }}" style="width: {{ row.implementation }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.implementation }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Access">
+                                                <div class="kpi-bar-fill {{ row.impl_access_class }}" style="width: {{ row.impl_access }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.impl_access }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Quality">
+                                                <div class="kpi-bar-fill {{ row.impl_quality_class }}" style="width: {{ row.impl_quality }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.impl_quality }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Equity">
+                                                <div class="kpi-bar-fill {{ row.impl_equity_class }}" style="width: {{ row.impl_equity }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.impl_equity }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell" title="Enabling Mechanisms">
+                                                <div class="kpi-bar-fill {{ row.impl_enabling_class }}" style="width: {{ row.impl_enabling }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.impl_enabling }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+
+                                {% if selected_kpi_part == 'all' or selected_kpi_part == 'slp' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.slp_class }}" style="width: {{ row.slp }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.slp }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+
+                                {% if selected_kpi_part == 'all' or selected_kpi_part == 'reading' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.reading_crla_class }}" style="width: {{ row.reading_crla }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.reading_crla }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.reading_philiri_class }}" style="width: {{ row.reading_philiri }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.reading_philiri }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+
+                                {% if selected_kpi_part == 'all' or selected_kpi_part == 'rma' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.rma_class }}" style="width: {{ row.rma }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.rma }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+
+                                {% if selected_kpi_part == 'all' or selected_kpi_part == 'supervision' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.supervision_class }}" style="width: {{ row.supervision }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.supervision }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+
+                                {% if selected_kpi_part == 'all' or selected_kpi_part == 'adm' %}
+                                    <td>
+                                        {% if row.has_data %}
+                                            <div class="kpi-bar-cell">
+                                                <div class="kpi-bar-fill {{ row.adm_class }}" style="width: {{ row.adm }}%;"></div>
+                                                <span class="kpi-bar-text">{{ row.adm }}%</span>
+                                            </div>
+                                        {% else %}
+                                            <span class="no-data">No data</span>
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" style="text-align: center; color: #6b7280; padding: 2rem;">
+                                    No data available for the selected filters. <a href="{% url 'smme_kpi_dashboard' %}">Clear filters</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if not kpi_table_data %}
+                <div style="text-align: center; margin: 2rem 0;">
+                    <p style="color: #6b7280;">No KPI data found for the selected criteria. Try adjusting your filters or <a href="{% url 'smme_kpi_dashboard' %}">clear filters</a>.</p>
+                </div>
+            {% endif %}
+        {% endif %}
+        {% endif %}
+        </div><!-- /#serverRenderedContent -->
+    </div>
+</div>
+
+<!-- Legend / Glossary Modal -->
+<div id="legendModal" role="dialog" aria-modal="true" aria-labelledby="legendTitle" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1000;">
+    <div style="background:#fff; max-width:720px; margin:5vh auto; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.2);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb;">
+            <h3 id="legendTitle" style="margin:0; color:#111827;">Legend & Glossary</h3>
+            <button type="button" id="closeLegendBtn" class="btn btn--secondary">Close</button>
+        </div>
+        <div style="padding:1rem 1.25rem; color:#374151; line-height:1.5; max-height:65vh; overflow:auto;">
+            <p style="margin-top:0;">Quick references for KPI columns and color cues.</p>
+            <ul style="margin:.5rem 0 1rem 1.25rem;">
+                <li><strong>% Implementation</strong> — Composite across Access, Quality, Equity, Enabling.</li>
+                <li><strong>SLP</strong> — School Learning Program overall performance.</li>
+                <li><strong>Reading (CRLA)</strong> — Comprehensive Rapid Literacy Assessment bands.</li>
+                <li><strong>Reading (PHILIRI)</strong> — Philippine Informal Reading Inventory bands.</li>
+                <li><strong>RMA</strong> — Remedial Math Assessment proficiency distribution.</li>
+                <li><strong>Supervision & TA</strong> — Portion of teachers supervised/observed provided TA.</li>
+                <li><strong>ADM & EiE</strong> — Alternative Delivery Modes and Education in Emergencies coverage.</li>
+            </ul>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-high" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>High / desirable</span>
+            </div>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-medium" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>Medium</span>
+            </div>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-low" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>Low / needs attention</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+    </main>
+    </div>
+
+
+<script>
+// Enhanced Dashboard JavaScript with Chart.js integration
+// Helpers available to all functions
+const FILTERS_FORM_ID = 'filtersBody';
+function getFiltersForm() { return document.getElementById(FILTERS_FORM_ID); }
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Sticky sidebar only (no collapse)
+    const panel = document.getElementById('filtersPanel');
+    // KPI Part quick tabs
+    document.querySelectorAll('.pill-tabs .pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            const sel = document.getElementById('kpi_part');
+            if (sel) {
+                sel.value = pill.getAttribute('data-kpi');
+                // Keep reading_type in sync when using split reading tabs
+                const kp = sel.value;
+                const rt = document.getElementById('reading_type');
+                if (rt && (kp === 'reading_crla' || kp === 'reading_philiri')) {
+                    rt.value = (kp === 'reading_philiri') ? 'philiri' : 'crla';
+                }
+                // Full form submit so sidebar filters re-render appropriately for selected KPI
+                const form = getFiltersForm();
+                if (form) form.submit(); else doAjaxUpdate();
+            }
+        });
+    });
+
+    // Sync reading_type on KPI Part select change as well
+    const kpiSelect = document.getElementById('kpi_part');
+    if (kpiSelect) {
+        kpiSelect.addEventListener('change', () => {
+            const kp = kpiSelect.value;
+            const rt = document.getElementById('reading_type');
+            if (rt && (kp === 'reading_crla' || kp === 'reading_philiri')) {
+                rt.value = (kp === 'reading_philiri') ? 'philiri' : 'crla';
+            }
+            // Submit to re-render the correct advanced filters block for the KPI
+            const form = getFiltersForm();
+            if (form) form.submit();
+        });
+    }
+
+    // Add visual "stuck" state to sticky sidebar when page is scrolled
+    try {
+        const filters = document.querySelector('.kpi-sidebar');
+        const onScroll = () => {
+            if (!filters) return;
+            const rect = filters.getBoundingClientRect();
+            const stuck = rect.top <= 56; // matches CSS top
+            filters.classList.toggle('is-stuck', stuck);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    } catch (_) {}
+
+    // (Who Didn't Submit feature removed)
+
+        // Sortable headers: clicking a header sets sort_by and toggles direction when same
+    document.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const sortBy = th.getAttribute('data-sort');
+            const sortByInput = document.getElementById('sort_by');
+            const sortDirInput = document.getElementById('sort_dir');
+            if (!sortByInput || !sortDirInput) return;
+            if (sortByInput.value === sortBy) {
+                sortDirInput.value = (sortDirInput.value === 'asc') ? 'desc' : 'asc';
+            } else {
+                sortByInput.value = sortBy;
+                sortDirInput.value = 'asc';
+            }
+            doAjaxUpdate();
+        });
+    });
+
+    // Highlight sorted column initially
+    try { highlightSortedColumn(); } catch (_) {}
+    // KPI Data from Django template
+    const kpiData = [
+        {% for row in kpi_table_data %}
+        {
+            school: '{{ row.school.name|escapejs }}',
+            district: '{{ row.district|escapejs }}',
+            school_level: '{{ row.school_level|escapejs }}',
+            implementation: {{ row.implementation }},
+            slp: {{ row.slp }},
+            reading_crla: {{ row.reading_crla }},
+            reading_philiri: {{ row.reading_philiri }},
+            rma: {{ row.rma }},
+            supervision: {{ row.supervision }},
+            adm: {{ row.adm }}
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    // Update summary statistics
+    updateSummaryStats(kpiData);
+
+    // Initialize charts if not in SLP detail view
+    const shouldInitCharts = {% if not is_slp_detail and kpi_table_data and show_analytics %}true{% else %}false{% endif %};
+    if (shouldInitCharts) {
+        initializeCharts(kpiData);
+        initializeSLPTrendChart();
+    }
+
+const filtersForm = getFiltersForm();
+let submitTimer = null;
+function debouncedAjax() {
+    if (submitTimer) clearTimeout(submitTimer);
+    submitTimer = setTimeout(() => doAjaxUpdate(), 250);
+}
+if (filtersForm) {
+    // Intercept submit (from inline onchange or Enter key) and AJAX it
+    filtersForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        doAjaxUpdate();
+    });
+    // Any change to selects/inputs inside the form triggers AJAX
+    filtersForm.addEventListener('change', () => debouncedAjax());
+    // Also respond immediately while typing and for select-on-input capable browsers
+    filtersForm.addEventListener('input', (e) => {
+        const t = e.target;
+        if (!t) return;
+        if (t.matches('input[type="number"], input[type="text"], select')) debouncedAjax();
+    });
+
+    // Initialize dynamic links on first load
+    try {
+        const params = currentQuery();
+        updateCsvLink(params);
+    } catch (_) {}
+
+    // keep sorted column highlighted on load
+    try { highlightSortedColumn(); } catch (_) {}
+
+    // Init active filters badge and quick search listeners
+    try { updateActiveFiltersBadge(); } catch (_) {}
+    const quickSearch = document.getElementById('quickSearch');
+    if (quickSearch) {
+        quickSearch.addEventListener('input', () => applyQuickSearchFilter());
+    }
+    // Copy link removed per request
+    const openLegendBtn = document.getElementById('openLegendBtn');
+    const closeLegendBtn = document.getElementById('closeLegendBtn');
+    const legendModal = document.getElementById('legendModal');
+    function toggleLegend(show){ if (!legendModal) return; legendModal.style.display = show ? 'block' : 'none'; }
+    if (openLegendBtn) openLegendBtn.addEventListener('click', () => toggleLegend(true));
+    if (closeLegendBtn) closeLegendBtn.addEventListener('click', () => toggleLegend(false));
+    // Close legend on ESC or overlay click
+    if (legendModal) {
+        legendModal.addEventListener('click', (e) => { if (e.target === legendModal) toggleLegend(false); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleLegend(false); });
+    }
+
+    // Kick off an initial client render so subsequent changes are all AJAX
+    try { doAjaxUpdate(); } catch(_) {}
+
+    // Filters column layout control
+    (function(){
+        const COLS_KEY = 'smme_filters_cols';
+        const sel = document.getElementById('filtersCols');
+        const form = getFiltersForm();
+        function apply(mode){
+            if (!form) return;
+            form.classList.remove('cols-1','cols-2','cols-3','cols-4');
+            if (mode && mode !== 'auto') form.classList.add('cols-'+mode);
+        }
+        if (sel) {
+            try {
+                // Force a reliable single-column default in the sidebar
+                const saved = localStorage.getItem(COLS_KEY) || '1';
+                sel.value = saved;
+                apply(saved);
+                sel.addEventListener('change', () => {
+                    localStorage.setItem(COLS_KEY, sel.value);
+                    apply(sel.value);
+                });
+            } catch(_) {}
+        }
+    })();
+
+    // Compact rows removed per feedback; single density mode retained
+}
+
+// Build query params from current form state
+function currentQuery() {
+    const form = getFiltersForm();
+    if (!form) return new URLSearchParams();
+    return new URLSearchParams(new FormData(form));
+}
+
+// Update CSV export link to reflect current params
+function updateCsvLink(params) {
+    const link = document.getElementById('exportCsvBtn');
+    if (!link) return;
+    const url = new URL(link.href, window.location.origin);
+    url.search = params.toString();
+    link.href = url.toString();
+}
+
+// (Who Didn't Submit link updater removed)
+
+// Highlight the currently sorted column (server-rendered and client-rendered)
+function highlightSortedColumn() {
+    const params = currentQuery();
+    const sortKey = (params.get('sort_by') || '').trim();
+    const client = document.getElementById('clientRenderedContent');
+    const server = document.getElementById('serverRenderedContent');
+    const scopes = [client, server].filter(Boolean);
+    scopes.forEach(scope => {
+        // clear previous
+        scope.querySelectorAll('th.sorted-col, td.sorted-col').forEach(el => el.classList.remove('sorted-col'));
+        // find matching header
+        const th = scope.querySelector(`th.sortable[data-sort="${sortKey}"]`);
+        if (!th) return;
+        th.classList.add('sorted-col');
+        // get column index (1-based)
+        const idx = Array.from(th.parentElement.children).indexOf(th) + 1;
+        scope.querySelectorAll(`tbody tr td:nth-child(${idx})`).forEach(td => td.classList.add('sorted-col'));
+    });
+}
+
+// Active filters counter based on visible chips
+function updateActiveFiltersBadge() {
+    const chips = document.querySelectorAll('#activeFilterChips .chip');
+    const badge = document.getElementById('activeFiltersCount');
+    if (!badge) return;
+    badge.textContent = String(chips.length);
+}
+
+// Quick search: filter visible table rows by school or district name
+function applyQuickSearchFilter() {
+    const input = document.getElementById('quickSearch');
+    if (!input) return;
+    const q = (input.value || '').toLowerCase().trim();
+    const client = document.getElementById('clientRenderedContent');
+    const server = document.getElementById('serverRenderedContent');
+    const scope = (client && client.style.display !== 'none') ? client : server;
+    if (!scope) return;
+    const tables = scope.querySelectorAll('table.kpi-table');
+    tables.forEach(tbl => {
+        const rows = tbl.querySelectorAll('tbody tr');
+        rows.forEach(tr => {
+            // ignore group headers that have no school name
+            if (tr.classList.contains('group-header')) return;
+            const schoolEl = tr.querySelector('.school-name');
+            const districtEl = tr.querySelector('.district-name');
+            const school = (schoolEl?.getAttribute('data-plain') || schoolEl?.textContent || '').toLowerCase();
+            const district = (districtEl?.getAttribute('data-plain') || districtEl?.textContent || '').toLowerCase();
+            const match = !q || school.includes(q) || district.includes(q);
+            tr.style.display = match ? '' : 'none';
+
+            // Highlight matches in visible rows
+            if (match) {
+                const re = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig') : null;
+                [schoolEl, districtEl].forEach(el => {
+                    if (!el) return;
+                    const plain = el.getAttribute('data-plain') || el.textContent;
+                    el.setAttribute('data-plain', plain);
+                    if (!q) { el.innerHTML = plain; return; }
+                    el.innerHTML = plain.replace(re, m => `<mark class="q">${m}</mark>`);
+                });
+            }
+        });
+    });
+}
+
+// Utility: group results by a key
+function groupBy(arr, keyFn) {
+    const m = new Map();
+    arr.forEach(item => {
+        const k = keyFn(item);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(item);
+    });
+    return m;
+}
+
+// Small helper to map a percent value to a performance class for bar colors
+function perfClass(pct) {
+    const v = Number(pct || 0);
+    if (v >= 75) return 'performance-high';
+    if (v >= 50) return 'performance-medium';
+    return 'performance-low';
+}
+
+// Renderers for different views
+function renderOverview(results) {
+    const kpiSelect = document.getElementById('kpi_part');
+    const currentKpi = kpiSelect ? kpiSelect.value : 'all';
+    const focusEl = document.getElementById('impl_focus');
+    const focus = focusEl ? focusEl.value : null;
+    const focusLabel = { access: 'Access', quality: 'Quality', equity: 'Equity', enabling: 'Enabling' }[focus] || 'Focus';
+
+    let headers = '';
+    let rows = '';
+
+    if (currentKpi === 'implementation') {
+        // Align client-rendered Implementation view with server: show Overall + Access/Quality/Equity/Enabling
+        headers = `
+        <thead>
+            <tr>
+                <th>School</th>
+                <th>District</th>
+                <th>Level</th>
+                <th title="Overall implementation across Access, Quality, Equity, Enabling">% Implementation</th>
+                <th title="Access %">Access${focus==='access' ? ' ▲' : ''}</th>
+                <th title="Quality %">Quality${focus==='quality' ? ' ▲' : ''}</th>
+                <th title="Equity %">Equity${focus==='equity' ? ' ▲' : ''}</th>
+                <th title="Enabling Mechanisms %">Enabling${focus==='enabling' ? ' ▲' : ''}</th>
+            </tr>
+        </thead>`;
+        rows = results.map(row => `
+        <tr>
+            <td class="school-name">${row.school_name}${row.has_data === false ? ' <span class="muted" style="font-size:.8em;">(No data)</span>' : ''}</td>
+            <td class="district-name">${row.district ?? ''}</td>
+            <td><span class="badge" style="background:${row.school_level==='Elementary'?'#10b981':(row.school_level==='Secondary'?'#3b82f6':'#6b7280')}; color:#fff; padding:.25rem .5rem; border-radius:.25rem; font-size:.75rem;">${row.school_level}</span></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.implementation)} kpi-implementation" data-key="${row.school_id || row.school_name}-impl" style="width:${row.has_data===false?0:(row.implementation ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.implementation ?? 0).toFixed ? row.implementation.toFixed(0) : row.implementation)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.impl_access)}" data-key="${row.school_id || row.school_name}-impl_access" style="width:${row.has_data===false?0:(row.impl_access ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.impl_access ?? 0).toFixed ? row.impl_access.toFixed(0) : row.impl_access)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.impl_quality)}" data-key="${row.school_id || row.school_name}-impl_quality" style="width:${row.has_data===false?0:(row.impl_quality ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.impl_quality ?? 0).toFixed ? row.impl_quality.toFixed(0) : row.impl_quality)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.impl_equity)}" data-key="${row.school_id || row.school_name}-impl_equity" style="width:${row.has_data===false?0:(row.impl_equity ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.impl_equity ?? 0).toFixed ? row.impl_equity.toFixed(0) : row.impl_equity)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.impl_enabling)}" data-key="${row.school_id || row.school_name}-impl_enabling" style="width:${row.has_data===false?0:(row.impl_enabling ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.impl_enabling ?? 0).toFixed ? row.impl_enabling.toFixed(0) : row.impl_enabling)+'%'}</span></div></td>
+        </tr>`).join('');
+        return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No data for selected filters.</td></tr>`}</tbody></table>`;
+    }
+
+    // Default overview with all parts columns
+    headers = `
+        <thead>
+            <tr>
+                <th>School</th>
+                <th>District</th>
+                <th>Level</th>
+                <th title="Overall implementation across Access, Quality, Equity, Enabling">% Implementation</th>
+                <th title="School Learning Program overall performance">SLP</th>
+                <th title="Comprehensive Rapid Literacy Assessment">Reading (CRLA)</th>
+                <th title="Philippine Informal Reading Inventory">Reading (PHILIRI)</th>
+                <th title="Remedial Math Assessment">RMA</th>
+                <th title="Instructional Supervision and Technical Assistance">Supervision & TA</th>
+                <th title="Alternative Delivery Modes & Education in Emergencies">ADM & EiE</th>
+            </tr>
+        </thead>`;
+    rows = results.map(row => `
+        <tr>
+            <td class="school-name">${row.school_name}${row.has_data === false ? ' <span class="muted" style="font-size:.8em;">(No data)</span>' : ''}</td>
+            <td class="district-name">${row.district ?? ''}</td>
+            <td><span class="badge" style="background:${row.school_level==='Elementary'?'#10b981':(row.school_level==='Secondary'?'#3b82f6':'#6b7280')}; color:#fff; padding:.25rem .5rem; border-radius:.25rem; font-size:.75rem;">${row.school_level}</span></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.implementation)} kpi-implementation" data-key="${row.school_id || row.school_name}-impl" style="width:${row.has_data===false?0:(row.implementation ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.implementation ?? 0).toFixed ? row.implementation.toFixed(0) : row.implementation)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.slp)} kpi-slp" data-key="${row.school_id || row.school_name}-slp" style="width:${row.has_data===false?0:(row.slp ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.slp ?? 0).toFixed ? row.slp.toFixed(0) : row.slp)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.reading_crla)} kpi-reading" data-key="${row.school_id || row.school_name}-crla" style="width:${row.has_data===false?0:(row.reading_crla ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.reading_crla ?? 0).toFixed ? row.reading_crla.toFixed(0) : row.reading_crla)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.reading_philiri)} kpi-reading" data-key="${row.school_id || row.school_name}-philiri" style="width:${row.has_data===false?0:(row.reading_philiri ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.reading_philiri ?? 0).toFixed ? row.reading_philiri.toFixed(0) : row.reading_philiri)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.rma)}" data-key="${row.school_id || row.school_name}-rma" style="width:${row.has_data===false?0:(row.rma ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.rma ?? 0).toFixed ? row.rma.toFixed(0) : row.rma)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.supervision)}" data-key="${row.school_id || row.school_name}-supervision" style="width:${row.has_data===false?0:(row.supervision ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.supervision ?? 0).toFixed ? row.supervision.toFixed(0) : row.supervision)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill ${perfClass(row.adm)}" data-key="${row.school_id || row.school_name}-adm" style="width:${row.has_data===false?0:(row.adm ?? 0)}%"></div><span class="kpi-bar-text">${row.has_data===false?'-':((row.adm ?? 0).toFixed ? row.adm.toFixed(0) : row.adm)+'%'}</span></div></td>
+        </tr>`).join('');
+    return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="10" style="text-align:center; color:#6b7280; padding:2rem;">No data for selected filters.</td></tr>`}</tbody></table>`;
+}
+
+function renderSLPDetail(results, sortBy) {
+    // Grouped by district if requested
+    let html = '';
+    if (sortBy === 'district') {
+        const groups = groupBy(results, r => r.district || 'N/A');
+        const ordered = Array.from(groups.keys()).sort();
+        ordered.forEach(d => {
+            html += `<div style="background:#eef2ff; color:#1f2937; padding:.5rem .75rem; margin:1rem 0; border-radius:6px; border-left:4px solid #6366f1; font-weight:600;">District: ${d}</div>`;
+            groups.get(d).forEach(sd => {
+                html += renderSLPSchoolSubjects(sd);
+            });
+        });
+        return html;
+    }
+    results.forEach(sd => { html += renderSLPSchoolSubjects(sd); });
+    return html;
+}
+function renderSLPSchoolSubjects(sd) {
+    const head = `
+        <div style="background:#f9fafb; padding:1.5rem; margin-bottom:2rem; border-radius:8px; border-left:4px solid #2563eb;">
+            <h3 style="margin:0 0 .5rem 0; color:#1f2937;">${sd.school_name}</h3>
+            <p style="color:#6b7280; margin:0 0 1rem 0;">District: ${sd.district || ''} | Level: ${sd.school_level || ''} | Subjects: ${sd.total_subjects || 0}</p>
+            <div style="overflow-x:auto;">
+                <table class="kpi-table" style="margin:0;">
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Grade Levels</th>
+                            <th>Total Enrolment</th>
+                            <th>Proficient Students</th>
+                            <th>Proficiency Rate</th>
+                            <th>DNME Count</th>
+                            <th>DNME Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+    const rows = (sd.subjects || []).map(subject => `
+                        <tr>
+                            <td><strong>${subject.subject}</strong></td>
+                            <td><small>${subject.grade_levels || ''}</small></td>
+                            <td>${subject.enrolment || 0}</td>
+                            <td>${subject.proficient_count || 0}</td>
+                            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill" data-key="${sd.school_id || sd.school_name}-${subject.subject}-prof" style="width:${subject.proficiency_rate || 0}%"></div><span class="kpi-bar-text">${subject.proficiency_rate || 0}%</span></div></td>
+                            <td>${subject.dnme_count || 0}</td>
+                            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-low" data-key="${sd.school_id || sd.school_name}-${subject.subject}-dnme" style="width:${subject.dnme_rate || 0}%"></div><span class="kpi-bar-text">${subject.dnme_rate || 0}%</span></div></td>
+                        </tr>`).join('');
+    const noDataRow = (sd.has_data === false || (sd.total_subjects||0) === 0)
+        ? `<tr><td colspan="7" style="text-align:center; color:#6b7280;">No SLP data for this school.</td></tr>`
+        : '';
+    const tail = `
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+    return head + (rows || noDataRow) + tail;
+}
+
+function renderSLPSummary(results, sortBy) {
+    // Compute per-school band % using school_totals (provided by API)
+    // Build flat rows table similar to server-rendered one (no district averages for now)
+    const headers = `
+        <thead>
+            <tr>
+                <th>School</th>
+                <th>District</th>
+                <th title="Did Not Meet Expectations">DNME %</th>
+                <th title="Fairly Satisfactory">FS %</th>
+                <th title="Satisfactory">S %</th>
+                <th title="Very Satisfactory">VS %</th>
+                <th title="Outstanding">O %</th>
+                <th>Enrollment</th>
+            </tr>
+        </thead>`;
+    // Include consistent heading + legend like SSR to avoid first-paint mismatch
+    const legend = `
+        <div style="margin-bottom: .75rem;">
+            <h2 style="margin-top: 0; color: #1f2937;">SLP School-Level Distribution</h2>
+            <p style="color: #6b7280; margin-bottom: .75rem;">Per-school percentages by band: DNME, FS, S, VS, O.</p>
+            <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                <span style="font-weight:700; color:#374151;">Legend:</span>
+                <span class="chip" style="background:#fee2e2; color:#b91c1c; border-color:#fecaca;">DNME</span>
+                <span class="chip" style="background:#ffedd5; color:#c2410c; border-color:#fed7aa;">FS</span>
+                <span class="chip" style="background:#fef9c3; color:#a16207; border-color:#fde68a;">S</span>
+                <span class="chip" style="background:#ecfccb; color:#3f6212; border-color:#d9f99d;">VS</span>
+                <span class="chip" style="background:#dbeafe; color:#1d4ed8; border-color:#bfdbfe;">O</span>
+            </div>
+        </div>`;
+    let rowsData = results.map(r => {
+        const t = r.school_totals || { enrolment:0,dnme:0,fs:0,s:0,vs:0,o:0 };
+        const den = t.enrolment || 0;
+        function pct(n){ return den ? Math.round((n/den)*1000)/10 : 0; }
+        return {
+            school_id: r.school_id,
+            school_name: r.school_name,
+            district: r.district || '',
+            dnme_pct: pct(t.dnme), fs_pct: pct(t.fs), s_pct: pct(t.s), vs_pct: pct(t.vs), o_pct: pct(t.o),
+            enrolment: den
+        };
+    });
+    if (sortBy === 'district') {
+        // group by district
+        const groups = groupBy(rowsData, x => x.district || 'N/A');
+        const ordered = Array.from(groups.keys()).sort();
+        let body = '';
+        ordered.forEach(d => {
+            body += `<tr class="group-header"><td colspan="8">District: ${d}</td></tr>`;
+            groups.get(d).forEach(row => { body += slpSummaryRow(row); });
+        });
+        return `${legend}<table class="kpi-table">${headers}<tbody>${body || `<tr><td colspan=\"8\" style=\"text-align:center; color:#6b7280; padding:2rem;\">No SLP data for selected filters.</td></tr>`}</tbody></table>`;
+    }
+    const rows = rowsData.map(slpSummaryRow).join('');
+    return `${legend}<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan=\"8\" style=\"text-align:center; color:#6b7280; padding:2rem;\">No SLP data for selected filters.</td></tr>`}</tbody></table>`;
+}
+function slpSummaryRow(row){
+    const noData = !row.enrolment || row.enrolment === 0;
+    return `<tr>
+        <td class="school-name">${row.school_name}</td>
+    <td class="district-name">${row.district}</td>
+    <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-dnme" data-key="${row.school_id || row.school_name}-dnme" style="width:${noData?0:row.dnme_pct}%"></div><span class="kpi-bar-text">${noData?'-':row.dnme_pct+'%'}</span></div></td>
+    <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-fs" data-key="${row.school_id || row.school_name}-fs" style="width:${noData?0:row.fs_pct}%"></div><span class="kpi-bar-text">${noData?'-':row.fs_pct+'%'}</span></div></td>
+    <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-s" data-key="${row.school_id || row.school_name}-s" style="width:${noData?0:row.s_pct}%"></div><span class="kpi-bar-text">${noData?'-':row.s_pct+'%'}</span></div></td>
+    <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-vs" data-key="${row.school_id || row.school_name}-vs" style="width:${noData?0:row.vs_pct}%"></div><span class="kpi-bar-text">${noData?'-':row.vs_pct+'%'}</span></div></td>
+    <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-slp-o" data-key="${row.school_id || row.school_name}-o" style="width:${noData?0:row.o_pct}%"></div><span class="kpi-bar-text">${noData?'-':row.o_pct+'%'}</span></div></td>
+        <td>${noData?'-':row.enrolment}</td>
+    </tr>`;
+}
+
+function renderReading(results, readingType, sortBy) {
+    const isCRLA = readingType === 'crla';
+    const headers = isCRLA ? `
+        <thead><tr>
+            <th>School</th><th>District</th>
+            <th title="CRLA: Low Emerging">Low Emerging %</th><th title="CRLA: High Emerging">High Emerging %</th><th title="CRLA: Developing">Developing %</th><th title="CRLA: Transitioning">Transitioning %</th>
+        </tr></thead>`
+        : `
+        <thead><tr>
+            <th>School</th><th>District</th>
+            <th title="PHILIRI: Frustration">Frustration %</th><th title="PHILIRI: Instructional">Instructional %</th><th title="PHILIRI: Independent">Independent %</th>
+        </tr></thead>`;
+    const rows = results.map(r => {
+        const nd = (r.has_data === false);
+        if (isCRLA) {
+            return `<tr>
+                <td>${r.school_name}</td><td>${r.district || ''}</td>
+                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-low" style="width:${nd?0:(r.low_emerging_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.low_emerging_pct || 0)+'%'}</span></div></td>
+                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-nearly" style="width:${nd?0:(r.high_emerging_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.high_emerging_pct || 0)+'%'}</span></div></td>
+                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-prof" style="width:${nd?0:(r.developing_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.developing_pct || 0)+'%'}</span></div></td>
+                <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-agl" style="width:${nd?0:(r.transitioning_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.transitioning_pct || 0)+'%'}</span></div></td>
+            </tr>`;
+        }
+        return `<tr>
+            <td>${r.school_name}</td><td>${r.district || ''}</td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-low" style="width:${nd?0:(r.frustration_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.frustration_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-nearly" style="width:${nd?0:(r.instructional_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.instructional_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-agl" style="width:${nd?0:(r.independent_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.independent_pct || 0)+'%'}</span></div></td>
+        </tr>`;
+    }).join('');
+    const colspan = isCRLA ? 6 : 5;
+    return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="${colspan}" style="text-align:center; color:#6b7280; padding:2rem;">No reading data for selected filters.</td></tr>`}</tbody></table>`;
+}
+
+function renderRMA(results, sortBy) {
+    const headers = `
+        <thead><tr>
+            <th>School</th><th>District</th><th>Grade</th>
+            <th>Not Proficient (&lt;25%)</th>
+            <th>Low Proficient (25–49%)</th>
+            <th>Nearly Proficient (50–74%)</th>
+            <th>Proficient (75–84%)</th>
+            <th>At Grade Level (&ge;85%)</th>
+        </tr></thead>`;
+    const rows = results.map(r => {
+        const nd = (r.has_data === false);
+        return `
+        <tr>
+            <td class="school-name">${r.school_name}</td>
+            <td class="district-name">${r.district || ''}</td>
+            <td>${r.grade_label || ''}</td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-not" data-key="${r.school_id || r.school_name}-np" style="width:${nd?0:(r.not_proficient_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.not_proficient_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-low" data-key="${r.school_id || r.school_name}-lp" style="width:${nd?0:(r.low_proficient_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.low_proficient_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-nearly" data-key="${r.school_id || r.school_name}-np2" style="width:${nd?0:(r.nearly_proficient_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.nearly_proficient_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-prof" data-key="${r.school_id || r.school_name}-prof" style="width:${nd?0:(r.proficient_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.proficient_pct || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill kpi-rma-agl" data-key="${r.school_id || r.school_name}-agl" style="width:${nd?0:(r.at_grade_level_pct || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.at_grade_level_pct || 0)+'%'}</span></div></td>
+        </tr>`;
+    }).join('');
+    return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="8" style="text-align:center; color:#6b7280; padding:2rem;">No RMA data for selected filters.</td></tr>`}</tbody></table>`;
+}
+
+function renderSupervision(results) {
+    const headers = `
+        <thead><tr>
+            <th>School</th><th>District</th><th>Total Teachers</th><th>Teachers Supervised/Observed & TA</th><th>% Provided TA</th>
+        </tr></thead>`;
+    const rows = results.map(r => {
+        const nd = (r.has_data === false);
+        return `
+        <tr>
+            <td class="school-name">${r.school_name}</td>
+            <td class="district-name">${r.district || ''}</td>
+            <td>${nd?'-':(r.total_teachers || 0)}</td>
+            <td>${nd?'-':(r.teachers_supervised_ta || 0)}</td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" data-key="${r.school_id || r.school_name}-ta" style="width:${nd?0:(r.percent_ta || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.percent_ta || 0)+'%'}</span></div></td>
+        </tr>`;
+    }).join('');
+    return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="5" style="text-align:center; color:#6b7280; padding:2rem;">No supervision data for selected filters.</td></tr>`}</tbody></table>`;
+}
+
+function renderADM(results) {
+    const headers = `
+        <thead><tr>
+            <th>School</th><th>District</th><th>Offers ADM</th><th>Programs</th><th>Physical %</th><th>Funds %</th><th>Overall ADM %</th>
+        </tr></thead>`;
+    const rows = results.map(r => {
+        const nd = (r.has_data === false);
+        return `
+        <tr>
+            <td class="school-name">${r.school_name}</td>
+            <td class="district-name">${r.district || ''}</td>
+            <td>${r.offers_adm ? '<span class="badge" style="background:#10b981; color:#fff;">Yes</span>' : '<span class="badge" style="background:#6b7280; color:#fff;">No</span>'}</td>
+            <td>${nd?'-':(r.program_count || 0)}</td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" data-key="${r.school_id || r.school_name}-adm-phys" style="width:${nd?0:(r.physical_avg || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.physical_avg || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" data-key="${r.school_id || r.school_name}-adm-funds" style="width:${nd?0:(r.funds_avg || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.funds_avg || 0)+'%'}</span></div></td>
+            <td><div class="kpi-bar-cell"><div class="kpi-bar-fill performance-high" data-key="${r.school_id || r.school_name}-adm-overall" style="width:${nd?0:(r.overall_adm || 0)}%"></div><span class="kpi-bar-text">${nd?'-':(r.overall_adm || 0)+'%'}</span></div></td>
+        </tr>`;
+    }).join('');
+    return `<table class="kpi-table">${headers}<tbody>${rows || `<tr><td colspan="7" style="text-align:center; color:#6b7280; padding:2rem;">No ADM data for selected filters.</td></tr>`}</tbody></table>`;
+}
+
+// Update Summary cards (first two numbers) from API
+function updateSummaryFromApi(view, results) {
+    const schoolsEl = document.querySelector('.summary-section .summary-grid .summary-card:nth-child(1) h3');
+    const pointsEl = document.querySelector('.summary-section .summary-grid .summary-card:nth-child(2) h3');
+    if (!schoolsEl || !pointsEl) return;
+    // Heuristic: schools = unique schools in results
+    let uniqueSchools = new Set();
+    results.forEach(r => uniqueSchools.add(r.school_id ?? r.id ?? (r.school && r.school.id)));
+    schoolsEl.textContent = String(uniqueSchools.size);
+    pointsEl.textContent = String(results.length);
+    // Also update the export meta count so the header reflects AJAX filtering
+    const exportCount = document.getElementById('export-schools-count');
+    if (exportCount) exportCount.textContent = String(uniqueSchools.size);
+}
+
+// Capture current bar widths keyed by data-key
+function captureBarState() {
+    const state = new Map();
+    document.querySelectorAll('.kpi-bar-fill[data-key]').forEach(el => {
+        try {
+            const parent = el.parentElement;
+            const w = parseFloat(getComputedStyle(el).width || '0');
+            const pct = parent && parent.clientWidth ? (w / parent.clientWidth) * 100 : 0;
+            state.set(el.dataset.key, pct);
+        } catch (_) {}
+    });
+    return state;
+}
+// Animate new bars from previous widths
+function animateBars(prevState) {
+    const els = document.querySelectorAll('.kpi-bar-fill[data-key]');
+    els.forEach(el => {
+        const key = el.dataset.key;
+        const final = parseFloat((el.style.width || '0').replace('%',''));
+        const start = prevState.has(key) ? prevState.get(key) : 0;
+        el.style.width = start + '%';
+        requestAnimationFrame(() => { el.style.width = final + '%'; });
+    });
+}
+
+let lastAbort = null;
+async function doAjaxUpdate() {
+    const client = document.getElementById('clientRenderedContent');
+    const server = document.getElementById('serverRenderedContent');
+    const loader = document.getElementById('ajaxLoader');
+    if (!client || !server) return; // safety
+
+    const params = currentQuery();
+    // honor SLP detail/summary mode: we'll always query kpi_part=slp for SLP view
+    const kpiPart = params.get('kpi_part') || 'all';
+
+    // Cancel any in-flight request
+    if (lastAbort) lastAbort.abort();
+    lastAbort = new AbortController();
+    const signal = lastAbort.signal;
+
+    // Visual state
+    server.style.display = 'none';
+    client.style.display = 'none';
+    loader.style.display = 'block';
+
+    // Build API URL
+    const apiUrl = new URL('{% url "smme_kpi_api" %}', window.location.origin);
+    // Request a large page_size to avoid pagination for now
+    params.set('page', '1');
+    params.set('page_size', '10000');
+    apiUrl.search = params.toString();
+
+    try {
+        const prev = captureBarState();
+        const urlStr = apiUrl.toString();
+        const res = await fetch(urlStr, {
+            signal,
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        try { console.debug('SMME KPI fetch', urlStr, 'results:', (data && data.results ? data.results.length : 'n/a')); } catch (_) {}
+        const view = data.view || kpiPart;
+        const results = data.results || [];
+
+        // Render according to view and current slp_mode
+        let html = '';
+        const slpMode = (params.get('slp_mode') || 'summary');
+        const sortBy = params.get('sort_by') || 'school_name';
+        const readingType = params.get('reading_type') || 'crla';
+        if (view === 'all' || view === 'implementation') {
+            html = renderOverview(results);
+        } else if (view === 'slp') {
+            if (slpMode === 'detail') html = renderSLPDetail(results, sortBy);
+            else html = renderSLPSummary(results, sortBy);
+        } else if (view === 'reading' || view === 'reading_crla' || view === 'reading_philiri') {
+            const rt = (view === 'reading_philiri') ? 'philiri' : ((view === 'reading_crla') ? 'crla' : readingType);
+            html = renderReading(results, rt, sortBy);
+        } else if (view === 'rma') {
+            html = renderRMA(results, sortBy);
+        } else if (view === 'supervision') {
+            html = renderSupervision(results);
+        } else if (view === 'adm') {
+            html = renderADM(results);
+        } else {
+            html = renderOverview(results);
+        }
+        client.innerHTML = html;
+        loader.style.display = 'none';
+        client.style.display = 'block';
+        // Animate bars from their previous values
+        animateBars(prev);
+
+        // Update summary cards and CSV link, and push URL
+    updateSummaryFromApi(view, results);
+    updateCsvLink(params);
+    // Re-apply helpers on fresh markup
+        try { updateActiveFiltersBadge(); } catch (_) {}
+        try { applyQuickSearchFilter(); } catch (_) {}
+    try { highlightSortedColumn(); } catch (_) {}
+        // Compact density re-apply removed; single density mode only
+        const newUrl = new URL(window.location.href);
+        newUrl.search = params.toString();
+        window.history.replaceState({}, '', newUrl.toString());
+    } catch (e) {
+        // On error, show server-rendered fallback
+        loader.style.display = 'none';
+        server.style.display = 'block';
+        console.error('AJAX update failed:', e);
+    }
+}
+
+// Cards view toggle with persistence
+const CARDS_KEY = 'smme_cards_view';
+const cardsToggle = document.getElementById('cardsViewToggle');
+const cardsGrid = document.getElementById('cardsGrid');
+const tableSection = document.querySelector('.kpi-table-section');
+function renderCards(data) {
+    if (!cardsGrid) return;
+    cardsGrid.innerHTML = '';
+    data.forEach(row => {
+        const card = document.createElement('div');
+        card.className = 'kpi-card';
+        card.innerHTML = `
+            <h4>${row.school}</h4>
+            <div class="meta">${row.district} • ${row.school_level}</div>
+            <div class="kpi"><span>Implementation</span><div class="bar"><span style="width:${row.implementation}%"></span></div><span>${row.implementation}%</span></div>
+            <div class="kpi"><span>SLP</span><div class="bar"><span style="width:${row.slp}%"></span></div><span>${row.slp}%</span></div>
+            <div class="kpi"><span>CRLA</span><div class="bar"><span style="width:${row.reading_crla}%"></span></div><span>${row.reading_crla}%</span></div>
+            <div class="kpi"><span>PHILIRI</span><div class="bar"><span style="width:${row.reading_philiri}%"></span></div><span>${row.reading_philiri}%</span></div>
+            <div class="kpi"><span>RMA</span><div class="bar"><span style="width:${row.rma}%"></span></div><span>${row.rma}%</span></div>
+            <div class="kpi"><span>Supervision</span><div class="bar"><span style="width:${row.supervision}%"></span></div><span>${row.supervision}%</span></div>
+            <div class="kpi"><span>ADM</span><div class="bar"><span style="width:${row.adm}%"></span></div><span>${row.adm}%</span></div>
+        `;
+        cardsGrid.appendChild(card);
+    });
+}
+function applyCardsToggle(init=false) {
+    const enabled = cardsToggle && cardsToggle.checked;
+    if (cardsGrid) cardsGrid.classList.toggle('active', enabled);
+    // Show/hide tables: simplest is to hide when enabled by adding a class to wrappers
+    const tableWrappers = document.querySelectorAll('.kpi-table');
+    tableWrappers.forEach(t => {
+        t.style.display = enabled ? 'none' : '';
+    });
+    if (enabled && !init) {
+        renderCards(kpiData);
+    }
+}
+if (cardsToggle) {
+    cardsToggle.checked = localStorage.getItem(CARDS_KEY) === '1';
+    if (cardsToggle.checked) {
+        renderCards(kpiData);
+        applyCardsToggle(true);
+    }
+    cardsToggle.addEventListener('change', () => {
+        localStorage.setItem(CARDS_KEY, cardsToggle.checked ? '1' : '0');
+        applyCardsToggle();
+        if (cardsToggle.checked) renderCards(kpiData);
+    });
+}
+
+function updateSummaryStats(data) {
+    if (data.length === 0) return;
+
+    // Calculate average SLP performance
+    const avgSLP = data.reduce((sum, row) => sum + row.slp, 0) / data.length;
+    const avgPerformanceEl = document.getElementById('avg-performance');
+    if (avgPerformanceEl) {
+        avgPerformanceEl.textContent = avgSLP.toFixed(1) + '%';
+    }
+
+    // Count high performers (75%+ SLP)
+    const highPerformers = data.filter(row => row.slp >= 75).length;
+    const highPerformersEl = document.getElementById('high-performers');
+    if (highPerformersEl) {
+        highPerformersEl.textContent = highPerformers;
+    }
+}
+
+// Persist Grade Level selection in localStorage and optionally auto-apply
+(function() {
+    const GRADE_KEY = 'smme_grade_range';
+    const gradeSel = document.getElementById('grade_range');
+    if (!gradeSel) return;
+    try {
+        const stored = localStorage.getItem(GRADE_KEY);
+        // If no explicit selection in the current request and we have a stored value, restore it
+        if (stored && gradeSel.value === 'all') {
+            gradeSel.value = stored;
+            // Avoid ReferenceError if a toggle isn't present
+            if (typeof autoApplyToggle !== 'undefined' && autoApplyToggle && autoApplyToggle.checked) {
+                gradeSel.form.submit();
+            }
+        }
+        gradeSel.addEventListener('change', () => {
+            localStorage.setItem(GRADE_KEY, gradeSel.value);
+        });
+    } catch (e) {
+        // no-op if localStorage unavailable
+    }
+})();
+
+function initializeCharts(data) {
+    if (data.length === 0) return;
+
+    // Performance Distribution Pie Chart
+    const performanceCanvas = document.getElementById('performanceChart');
+    if (performanceCanvas) {
+        const ctx = performanceCanvas.getContext('2d');
+        
+        // Categorize performance levels
+        const highPerf = data.filter(row => row.slp >= 75).length;
+        const mediumPerf = data.filter(row => row.slp >= 50 && row.slp < 75).length;
+        const lowPerf = data.filter(row => row.slp < 50).length;
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['High (75%+)', 'Medium (50-74%)', 'Low (<50%)'],
+                datasets: [{
+                    data: [highPerf, mediumPerf, lowPerf],
+                    backgroundColor: [
+                        '#10b981', // Green for high
+                        '#f59e0b', // Yellow for medium  
+                        '#ef4444'  // Red for low
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const percentage = ((context.parsed / data.length) * 100).toFixed(1);
+                                return context.label + ': ' + context.parsed + ' schools (' + percentage + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // KPI Comparison Bar Chart
+    const kpiCanvas = document.getElementById('kpiChart');
+    if (kpiCanvas) {
+        const ctx = kpiCanvas.getContext('2d');
+        
+        // Calculate average KPIs
+        const avgKPIs = {
+            implementation: data.reduce((sum, row) => sum + row.implementation, 0) / data.length,
+            slp: data.reduce((sum, row) => sum + row.slp, 0) / data.length,
+            reading_crla: data.reduce((sum, row) => sum + row.reading_crla, 0) / data.length,
+            reading_philiri: data.reduce((sum, row) => sum + row.reading_philiri, 0) / data.length,
+            rma: data.reduce((sum, row) => sum + row.rma, 0) / data.length,
+            supervision: data.reduce((sum, row) => sum + row.supervision, 0) / data.length,
+            adm: data.reduce((sum, row) => sum + row.adm, 0) / data.length
+        };
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Implementation', 'SLP', 'CRLA Reading', 'PHILIRI Reading', 'RMA', 'Supervision', 'ADM'],
+                datasets: [{
+                    label: 'Average Performance (%)',
+                    data: [
+                        avgKPIs.implementation,
+                        avgKPIs.slp,
+                        avgKPIs.reading_crla,
+                        avgKPIs.reading_philiri,
+                        avgKPIs.rma,
+                        avgKPIs.supervision,
+                        avgKPIs.adm
+                    ],
+                    backgroundColor: [
+                        '#10b981', // Implementation - Green
+                        '#3b82f6', // SLP - Blue
+                        '#8b5cf6', // CRLA Reading - Purple
+                        '#a855f7', // PHILIRI Reading - Purple variant
+                        '#f59e0b', // RMA - Orange
+                        '#ef4444', // Supervision - Red
+                        '#06b6d4'  // ADM - Cyan
+                    ],
+                    borderRadius: 4,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed.y.toFixed(1) + '%';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        grid: {
+                            color: '#e5e7eb'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function initializeSLPTrendChart() {
+    const el = document.getElementById('slpTrendChart');
+    if (!el) return;
+    const ctx = el.getContext('2d');
+    const trend = {{ slp_trend_data|default:'[]'|safe }};
+    const labels = trend.map(x => x.quarter);
+    const datasets = [
+        { label: 'DNME', data: trend.map(x => x.dnme_pct), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.15)', tension: .25 },
+        { label: 'FS', data: trend.map(x => x.fs_pct), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.15)', tension: .25 },
+        { label: 'S', data: trend.map(x => x.s_pct), borderColor: '#facc15', backgroundColor: 'rgba(250,204,21,.15)', tension: .25 },
+        { label: 'VS', data: trend.map(x => x.vs_pct), borderColor: '#84cc16', backgroundColor: 'rgba(132,204,22,.15)', tension: .25 },
+        { label: 'O', data: trend.map(x => x.o_pct), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.15)', tension: .25 },
+    ];
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            stacked: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y?.toFixed?.(1) ?? c.parsed.y}%` } }
+            },
+            scales: {
+                y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } },
+            },
+            elements: { point: { radius: 3 } }
+        }
+    });
+}
+
+// Submit analytics graph year when changed (preserve current GET params)
+const graphYearSel = document.getElementById('graph_school_year');
+if (graphYearSel) {
+    graphYearSel.addEventListener('change', () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('graph_school_year', graphYearSel.value);
+        url.searchParams.set('show_analytics', '1');
+        window.location.assign(url.toString());
+    });
+}
+
+// Enhanced animation for progress bars
+function animateProgressBars() {
+    const progressBars = document.querySelectorAll('.animated-progress-bar');
+    progressBars.forEach(bar => {
+        const targetWidth = bar.getAttribute('data-width') || bar.style.width;
+        bar.style.width = '0%';
+        setTimeout(() => {
+            bar.style.width = targetWidth;
+        }, 100);
+    });
+}
+
+// Call animation on load
+setTimeout(animateProgressBars, 500);
+
+// Density toggle persistence
+(function(){
+    const D_KEY = 'smme_density';
+    const toggle = document.getElementById('densityToggle');
+    if (!toggle) return;
+    try {
+        const saved = localStorage.getItem(D_KEY);
+        const compact = saved === 'compact';
+        toggle.checked = compact;
+        document.body.classList.toggle('density-compact', compact);
+        toggle.addEventListener('change', () => {
+            const useCompact = toggle.checked;
+            document.body.classList.toggle('density-compact', useCompact);
+            localStorage.setItem(D_KEY, useCompact ? 'compact' : 'comfortable');
+        });
+    } catch (_) {}
+})();
+// Close DOMContentLoaded handler
+});
+</script>
+{% endblock %}

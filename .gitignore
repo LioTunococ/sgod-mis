@@ -1,20 +1,53 @@
-# Python cache
+########################################
+# Python
+########################################
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.so
 
-# Virtual environment
+########################################
+# Virtual environments
+########################################
 .venv/
+venv/
+ENV/
 
-# SQLite database (if using sqlite in dev)
+########################################
+# Django / Project
+########################################
 db.sqlite3
-
-# Django migration logs
 *.log
-
-# VSCode / PyCharm / IDE stuff
-.vscode/
-.idea/
-
-# Static & media (collected or uploaded)
+local_settings.py
 staticfiles/
 media/
+
+########################################
+# Editors/IDE
+########################################
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+########################################
+# Node/Front-end (if any)
+########################################
+node_modules/
+
+########################################
+# Coverage/Reports
+########################################
+htmlcov/
+.coverage*
+pytest-cache/
+
+########################################
+# Misc
+########################################
+__tmp_patch.txt
+/
+# Windows reserved name present in repo; ignore to avoid Git errors on Windows
+/CON

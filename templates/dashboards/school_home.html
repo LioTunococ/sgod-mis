@@ -1,0 +1,391 @@
+{% load static %}
+{% load dashboard_filters %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>School Portal</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  </head>
+  <body class="container">
+    {% include "includes/top_nav.html" %}
+
+    {% if not school_portal %}
+      <div class="card card--wide" style="margin-top: 2rem; text-align: center; padding: 3rem;">
+        <h1 style="color: #dc2626; margin-bottom: 1rem;">Access Denied</h1>
+        <p style="font-size: 1.125rem; color: #6b7280; margin-bottom: 1.5rem;">
+          No school portal data available for this account.
+        </p>
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 2rem;">
+          <p style="color: #991b1b; margin-bottom: 0.5rem;"><strong>Possible reasons:</strong></p>
+          <ul style="text-align: left; color: #991b1b; display: inline-block;">
+            <li>Your user account is not linked to a school</li>
+            <li>You don't have School Head permissions</li>
+            <li>Your school assignment is missing in the database</li>
+          </ul>
+        </div>
+        <p style="color: #6b7280;">
+          Please contact your SGOD administrator to assign you to a school.
+        </p>
+      </div>
+    {% else %}
+
+    <!-- School Portal Hero -->
+    <section class="portal-hero">
+      <div class="portal-hero__header">
+        <div>
+          <h1>{{ school_portal.school.name }}</h1>
+          <div class="portal-hero__meta">
+            <span class="muted"><strong>Code:</strong> {{ school_portal.school.code }}</span>
+            {% if school_portal.school.district %}
+              <span class="muted">&middot;</span>
+              <span class="muted"><strong>District:</strong> {{ school_portal.school.district.name }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="portal-hero__actions">
+          <a href="{% url 'organizations:edit_my_school_profile' %}" class="btn btn--secondary btn--sm">
+            Update School Profile
+          </a>
+        </div>
+      </div>
+
+      {% if school_portal.profile_prompt %}
+        <div class="portal-hero__prompt">
+          <span>⚠</span>
+          <span>{{ school_portal.profile_prompt }}</span>
+        </div>
+      {% endif %}
+
+      <!-- Summary Stats -->
+      <div class="portal-hero__summary">
+        <div class="hero-summary__item">
+          <span class="hero-summary__label">In Progress</span>
+          <span class="hero-summary__value">{{ school_portal.summary.total_in_progress }}</span>
+        </div>
+        <div class="hero-summary__item">
+          <span class="hero-summary__label">Submitted/Noted</span>
+          <span class="hero-summary__value">{{ school_portal.summary.total_submitted }}</span>
+        </div>
+        <div class="hero-summary__item">
+          <span class="hero-summary__label">Returns to Address</span>
+          <span class="hero-summary__value" style="{% if school_portal.summary.returns > 0 %}color: #dc2626;{% endif %}">{{ school_portal.summary.returns }}</span>
+        </div>
+        <div class="hero-summary__item">
+          <span class="hero-summary__label">Open Forms</span>
+          <span class="hero-summary__value">{{ school_portal.summary.open_forms }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Unit Tabbed Dashboard -->
+    {% if section_cards %}
+    <section class="card" style="margin-bottom: 1.5rem;">
+      <div style="margin-bottom: 1.5rem;">
+        <h2>Form Submissions by Unit</h2>
+        <p class="muted">Manage your forms across all government units</p>
+      </div>
+
+      <!-- Section Tabs -->
+      <div class="section-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb; overflow-x: auto; padding-bottom: 0;">
+        {% for card in section_cards %}
+          <button 
+            class="section-tab {% if card.section.code == selected_section_code or not selected_section_code and forloop.first %}active{% endif %}"
+            onclick="selectSection('{{ card.section.code }}', event)"
+            style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; font-weight: 500; font-size: 0.875rem; cursor: pointer; white-space: nowrap; transition: all 0.2s; position: relative;">
+            {{ card.section.code|upper }}
+            {% if card.drafts_count > 0 %}
+              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.5rem; background: #ef4444; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Drafts/Returns">
+                {{ card.drafts_count }}
+              </span>
+            {% endif %}
+            {% if card.submitted_pending_count and card.submitted_pending_count > 0 %}
+              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #f59e0b; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Submitted, awaiting review">
+                {{ card.submitted_pending_count }}
+              </span>
+            {% endif %}
+            {% if card.noted_count and card.noted_count > 0 %}
+              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #16a34a; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Noted">
+                {{ card.noted_count }}
+              </span>
+            {% endif %}
+            {% if card.open_count > 0 %}
+              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #ef4444; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Open forms">
+                {{ card.open_count }}
+              </span>
+            {% endif %}
+          </button>
+        {% endfor %}
+      </div>
+
+      <!-- Section Content Panels -->
+      {% for card in section_cards %}
+        <div 
+          class="section-content" 
+          id="section-{{ card.section.code }}"
+          {% if card.section.code != selected_section_code and not forloop.first or selected_section_code and card.section.code != selected_section_code %}style="display: none;"{% endif %}>
+          
+          <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1.125rem; font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">
+              {{ card.section.name }}
+            </h3>
+            <p class="muted" style="font-size: 0.875rem;">
+              Manage your {{ card.section.code|upper }} submissions
+            </p>
+          </div>
+
+          <!-- In Progress Forms for this Section -->
+          {% if card.drafts_count > 0 %}
+            <div style="margin-bottom: 2rem;">
+              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+                In Progress ({{ card.drafts_count }})
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                {% for draft in card.drafts %}
+                  <div style="padding: 1rem; background: #fefce8; border: 1px solid #fde047; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1;">
+                      <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">
+                        {{ draft.submission.form_template.title }}
+                      </div>
+                      <div style="font-size: 0.875rem; color: #6b7280;">
+                        {% if draft.submission.period %}{{ draft.submission.period.label }}{% endif %}
+                        {% if draft.progress > 0 %}
+                          &middot; {{ draft.progress }}% complete
+                        {% endif %}
+                      </div>
+                      {% if draft.submission.status == 'returned' %}
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #fef2f2; border-left: 3px solid #dc2626; font-size: 0.875rem; color: #991b1b;">
+                          <strong>Returned for revision:</strong> {{ draft.submission.returned_remarks|truncatewords:20 }}
+                        </div>
+                      {% endif %}
+                    </div>
+                    <div>
+                      <a href="{% url 'edit_submission' draft.submission.id %}" class="btn btn--primary btn--sm">
+                        {% if draft.submission.status == 'returned' %}Review{% else %}Continue{% endif %}
+                      </a>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Submitted/Noted for this Section -->
+          {% if card.submitted_count and card.submitted_count > 0 %}
+            <div style="margin-bottom: 2rem;">
+              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+                Submitted ({{ card.submitted_count }})
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                {% for s in card.submitted %}
+                  {% if s.status == 'noted' %}
+                    <div style="padding: 1rem; background: #ecfdf5; border: 1px solid #16a34a; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                      <div style="flex: 1;">
+                        <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; display:flex; align-items:center; gap:0.5rem;">
+                          {{ s.form_template.title }}
+                          <span class="status-pill status-pill--{{ s.status }}">{{ s.get_status_display }}</span>
+                        </div>
+                        <div style="font-size: 0.875rem; color: #6b7280;">
+                          {% if s.period %}{{ s.period.label }}{% endif %}
+                          {% if s.submitted_at %}&middot; Submitted {{ s.submitted_at|date:"M d, Y" }}{% endif %}
+                        </div>
+                        {% if s.noted_remarks %}
+                          <div style="margin-top: 0.5rem; padding: 0.5rem; background: #f0fdf4; border-left: 3px solid #16a34a; font-size: 0.875rem; color: #166534;">
+                            <strong>Section remarks:</strong> {{ s.noted_remarks|truncatewords:30 }}
+                          </div>
+                        {% endif %}
+                      </div>
+                      <div>
+                        <a href="{% url 'edit_submission' s.id %}" class="btn btn--secondary btn--sm">View</a>
+                      </div>
+                    </div>
+                  {% else %}
+                    <div style="padding: 1rem; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                      <div style="flex: 1;">
+                        <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; display:flex; align-items:center; gap:0.5rem;">
+                          {{ s.form_template.title }}
+                          <span class="status-pill status-pill--{{ s.status }}">{{ s.get_status_display }}</span>
+                        </div>
+                        <div style="font-size: 0.875rem; color: #6b7280;">
+                          {% if s.period %}{{ s.period.label }}{% endif %}
+                          {% if s.submitted_at %}&middot; Submitted {{ s.submitted_at|date:"M d, Y" }}{% endif %}
+                        </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #92400e;">
+                          Awaiting review by {{ card.section.name }}.
+                        </div>
+                      </div>
+                      <div>
+                        <a href="{% url 'edit_submission' s.id %}" class="btn btn--secondary btn--sm">View</a>
+                      </div>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Available Forms for this Section -->
+          {% if card.open_count > 0 %}
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+                Available Forms ({{ card.open_count }})
+              </h3>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+                {% for form_info in card.available_forms %}
+                  <div style="padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem;">
+                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">
+                      {{ form_info.form_template.title }}
+                    </div>
+                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">
+                      Due: {{ form_info.deadline|date:"M d, Y" }}
+                    </div>
+                    {% if form_info.period %}
+                      <a href="{% url 'start_submission' form_info.form_template.code form_info.period.id %}" class="btn btn--secondary btn--sm btn--block">
+                        Start Form
+                      </a>
+                    {% else %}
+                      <span class="btn btn--secondary btn--sm btn--block" style="opacity: 0.5; cursor: not-allowed;">
+                        No Period Available
+                      </span>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          <!-- Empty State -->
+          {% if card.drafts_count == 0 and card.open_count == 0 %}
+            <div style="padding: 3rem; text-align: center; background: #f9fafb; border-radius: 0.5rem;">
+              <div style="font-weight: 600; color: #6b7280; margin-bottom: 0.25rem;">No forms available</div>
+              <div style="font-size: 0.875rem; color: #9ca3af;">
+                There are currently no {{ card.section.code|upper }} forms to submit
+              </div>
+            </div>
+          {% endif %}
+
+        </div>
+      {% endfor %}
+
+    </section>
+    {% endif %}
+
+    <!-- JavaScript for Tab Switching -->
+    <script>
+    function selectSection(sectionCode, evt) {
+      // Hide all section contents
+      document.querySelectorAll('.section-content').forEach(el => el.style.display = 'none');
+      
+      // Show selected section
+      const selectedSection = document.getElementById('section-' + sectionCode);
+      if (selectedSection) {
+        selectedSection.style.display = 'block';
+      }
+      
+      // Update tab active states
+      document.querySelectorAll('.section-tab').forEach(tab => {
+        tab.classList.remove('active');
+        // Update inline styles for active state
+        tab.style.color = '#6b7280';
+        tab.style.borderBottomColor = 'transparent';
+        tab.style.fontWeight = '500';
+      });
+      
+      // Add active class to clicked tab (ensure we select the button element, not the inner badge)
+      const btn = (evt && evt.currentTarget) ? evt.currentTarget : document.querySelector('.section-tab');
+      if (btn) {
+        btn.classList.add('active');
+        btn.style.color = '#2563eb';
+        btn.style.borderBottomColor = '#2563eb';
+        btn.style.fontWeight = '600';
+      }
+      
+  // We no longer force badge colors; badge color reflects status.
+      
+      // Update URL without reload
+      const url = new URL(window.location);
+      url.searchParams.set('section', sectionCode);
+      window.history.pushState({}, '', url);
+    }
+
+    // Add hover effects
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.section-tab').forEach(tab => {
+        tab.addEventListener('mouseenter', function() {
+          if (!this.classList.contains('active')) {
+            this.style.color = '#1f2937';
+            this.style.background = '#f9fafb';
+          }
+        });
+        tab.addEventListener('mouseleave', function() {
+          if (!this.classList.contains('active')) {
+            this.style.color = '#6b7280';
+            this.style.background = 'none';
+          }
+        });
+      });
+    });
+    </script>
+
+    <!-- Section Overview (Legacy - Now Hidden, replaced by tabs above) -->
+    {% if false %}  {# Disabled - replaced by tabbed interface #}
+    {% if section_cards %}
+      <section class="card">
+        <h2>Your Forms</h2>
+        <p class="muted">Forms in progress and available to start, organized by section</p>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
+          {% for card in section_cards %}
+            {% include "dashboards/_integrated_section_card.html" with card=card %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+    {% endif %}  {# Close the {% if false %} #}
+
+    <!-- Action Items (Outstanding Returns) -->
+    {% if school_portal.outstanding_returns %}
+      <section class="card">
+        <h2>Outstanding Returns</h2>
+        <ul class="portal-list portal-list--stacked">
+          {% for submission in school_portal.outstanding_returns %}
+            <li class="portal-list__item">
+              <div>
+                <div class="portal-list__title">{{ submission.form_template.title }}</div>
+                <div class="portal-list__meta">
+                  <span class="status-pill status-pill--{{ submission.status }}">{{ submission.get_status_display }}</span>
+                  {% if submission.period %}
+                    &nbsp;&middot;&nbsp;{{ submission.period.label }}
+                  {% endif %}
+                  &nbsp;&middot;&nbsp;Updated {{ submission.updated_at|date:"M j, Y g:i a" }}
+                </div>
+                {% if submission.returned_remarks %}
+                  <p class="portal-list__remarks">{{ submission.returned_remarks|linebreaksbr }}</p>
+                {% endif %}
+              </div>
+              <div class="portal-list__actions">
+                <a class="btn btn--secondary btn--sm" href="{% url 'edit_submission' submission.id %}">Review &amp; resubmit</a>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    <!-- Reviewer Tools (if applicable) -->
+    {% if show_reviewer_dashboards %}
+      <section class="card">
+        <h2>Reviewer Tools</h2>
+        <div class="portal-hero__quick">
+          <a href="{{ district_dashboard_url }}" class="btn btn--ghost btn--sm">Submission Gaps</a>
+          <a href="{{ smme_dashboard_url }}" class="btn btn--ghost btn--sm">SMME KPI</a>
+          {% if first_section_code %}
+            <a href="{% url 'review_queue' first_section_code %}" class="btn btn--ghost btn--sm">Review Queue</a>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% endif %}  {# Close the school_portal check #}
+  </body>
+</html>

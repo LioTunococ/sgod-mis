@@ -1,0 +1,528 @@
+{% load submission_tags %}
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{{ submission.form_template.title }} - Read-Only Review</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 1200px; }
+      a { color:#0b57d0; text-decoration:none; }
+      .layout { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:1rem; }
+      .card { border:1px solid #e5e7eb; border-radius:.75rem; padding:1rem; background:#fff; }
+      .tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin:1.5rem 0; }
+      .tabs a { padding:.5rem 1rem; border-radius:.5rem; border:1px solid #e5e7eb; background:#f8fafc; color:#0f172a; }
+      .tabs a.active { background:#0b57d0; color:#fff; border-color:#0b57d0; }
+      table { width:100%; border-collapse:collapse; margin-top:.75rem; }
+      th, td { border:1px solid #e5e7eb; padding:.5rem; text-align:left; vertical-align:top; }
+      th { background:#f1f5f9; font-weight:600; }
+      .muted { color:#64748b; }
+      .badge { display:inline-block; padding:.2rem .6rem; border-radius:1rem; font-size:.85rem; }
+      .badge--draft { background:#f4f4f5; color:#18181b; }
+      .badge--submitted { background:#dbeafe; color:#1e40af; }
+      .badge--returned { background:#fef3c7; color:#9a3412; }
+      .badge--noted { background:#dcfce7; color:#166534; }
+      .timeline { list-style:none; padding-left:0; margin:0; display:flex; flex-direction:column; gap:.75rem; }
+      .timeline__item { padding-left:1.25rem; position:relative; }
+      .timeline__item::before { content:''; position:absolute; left:0; top:.45rem; width:10px; height:10px; border-radius:999px; background:#3b82f6; }
+      .timeline__item::after { content:''; position:absolute; left:4px; top:1rem; bottom:-.75rem; width:2px; background:#e5e7eb; }
+      .timeline__item:last-child::after { display:none; }
+      .timeline__meta { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+      .timeline__summary { font-size:.9rem; color:#475569; }
+      .timeline__remarks { margin-top:.35rem; }
+      .grid-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; }
+      .section-title { margin-top:1.5rem; }
+      .export-actions { display:flex; gap:.5rem; margin:0 0 1.5rem; flex-wrap:wrap; }
+      .dashboard-links { display:flex; gap:.5rem; margin:1rem 0; flex-wrap:wrap; }
+      .dashboard-links a { padding:.4rem .9rem; border-radius:.5rem; border:1px solid #0b57d0; background:#0b57d0; color:#fff; font-weight:500; text-decoration:none; }
+      .role-badges { display:flex; gap:.5rem; flex-wrap:wrap; margin:0 0 1rem; }
+      .role-badge { display:inline-block; padding:.3rem .7rem; border-radius:999px; font-size:.8rem; font-weight:500; background:#e2e8f0; color:#0f172a; }
+      .role-badge--admin { background:#0f172a; color:#fff; }
+      .role-badge--section { background:#1d4ed8; color:#fff; }
+      .role-badge--psds { background:#047857; color:#fff; }
+      .role-badge--school { background:#f59e0b; color:#fff; }
+      .btn { display:inline-block; padding:.45rem .95rem; border-radius:.5rem; border:1px solid #0b57d0; background:#0b57d0; color:#fff; font-weight:500; }
+      .btn:hover { background:#0844a0; border-color:#0844a0; }
+      hr { border:0; border-top:1px solid #e2e8f0; margin:1rem 0; }
+    </style>
+  </head>
+  <body>
+    {% include "includes/auth_nav.html" %}
+    <p>
+      <a href="{{ review_url }}">&larr; Back to Review Detail</a>
+      {% if queue_url %}&nbsp;&middot;&nbsp;<a href="{{ queue_url }}">Back to Queue</a>{% endif %}
+    </p>
+
+    {% if role_flags.is_section_admin or role_flags.is_sgod_admin or role_flags.is_psds %}
+    <div class="dashboard-links">
+      <a href="{{ district_dashboard_url }}">Who Didn't Submit</a>
+      <a href="{{ smme_dashboard_url }}">SMME KPI Dashboard</a>
+    </div>
+    {% endif %}
+
+    {% include "includes/role_flag_badges.html" %}
+
+    <h1>{{ submission.form_template.title }} - {{ submission.period.label }}</h1>
+
+    <div class="layout">
+      <section class="card">
+        <h3>Submission Meta</h3>
+        <p><strong>School:</strong> {{ submission.school.name }}</p>
+        <p><strong>Section:</strong> {{ submission.form_template.section.name }}</p>
+        {% if school_profile %}
+          <p><strong>School Head:</strong> {{ school_profile.head_name|default:"Not set" }}</p>
+          <p><strong>Contact:</strong> {{ school_profile.head_contact|default:"Not provided" }}</p>
+          {% if school_profile_strands %}<p><strong>Strands / Programs:</strong> {{ school_profile_strands }}</p>{% endif %}
+        {% endif %}
+        {% status_badge submission.status as badge %}
+        <p><strong>Status:</strong> <span class="badge {{ badge.css_class }}">{{ badge.label }}</span></p>
+        <p><strong>Submitted at:</strong> {{ submission.submitted_at|default:'-' }}</p>
+        {% if grade_span_label %}<p class="muted">Grade span {{ grade_span_label }}</p>{% endif %}
+        <h4 class="section-title">Attachments</h4>
+        <ul class="muted">
+          {% for attachment in attachments %}
+            <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.original_name }}</a></li>
+          {% empty %}
+            <li>No attachments provided.</li>
+          {% endfor %}
+        </ul>
+      </section>
+      <section class="card">
+        <h3>Timeline</h3>
+        {% if timeline_entries %}
+          <ul class="timeline">
+            {% for entry in timeline_entries %}
+              {% status_badge entry.to_status as entry_badge %}
+              <li class="timeline__item">
+                <div class="timeline__meta">
+                  <span class="badge {{ entry_badge.css_class }}">{{ entry_badge.label }}</span>
+                  <span class="muted">{{ entry.created_at|date:'M j, Y H:i' }}</span>
+                </div>
+                <div class="timeline__summary">
+                  {% if entry.actor %}
+                    {{ entry.actor.get_full_name|default:entry.actor.username }}
+                  {% else %}
+                    System
+                  {% endif %}
+                  {% if entry.from_status %}
+                    changed from {{ entry.get_from_status_display }} to {{ entry.get_to_status_display }}
+                  {% else %}
+                    set status to {{ entry.get_to_status_display }}
+                  {% endif %}
+                </div>
+                {% if entry.remarks %}
+                  <p class="timeline__remarks">{{ entry.remarks|linebreaksbr }}</p>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No timeline entries yet.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <nav class="tabs">
+      {% for tab in tabs %}
+        <a href="?tab={{ tab.key }}" class="{% if current_tab == tab.key %}active{% endif %}">{{ tab.label }}</a>
+      {% endfor %}
+    </nav>
+
+    {% if role_flags.is_section_admin or role_flags.is_psds or role_flags.is_sgod_admin %}
+    {% if role_flags.is_section_admin or role_flags.is_psds or role_flags.is_sgod_admin %}
+    <div class="export-actions">
+      <a class="btn" href="{{ export_urls.csv }}">Download CSV</a>
+      <a class="btn" href="{{ export_urls.xlsx }}">Download XLSX</a>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if current_tab == 'projects' %}
+      <section class="card">
+        <h3>Projects &amp; Activities</h3>
+        {% if projects %}
+          {% for project in projects %}
+            <article class="card" style="margin-top:1rem;">
+              <h4>{{ project.project_title }}</h4>
+              <p class="muted">Area of Concern: {{ project.area_of_concern|default:'-' }} &middot; Conference Date: {{ project.conference_date|date:'M j, Y'|default:'-' }}</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Activity</th>
+                    <th>Output Target</th>
+                    <th>Output Actual</th>
+                    <th>Timeframe Target</th>
+                    <th>Timeframe Actual</th>
+                    <th>Budget Target</th>
+                    <th>Budget Actual</th>
+                    <th>Progress Interpretation</th>
+                    <th>Issues / Gaps</th>
+                    <th>Facilitating Factors</th>
+                    <th>Agreements / Next Steps</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for activity in project.activities.all %}
+                    <tr>
+                      <td>{{ activity.activity|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.output_target|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.output_actual|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.timeframe_target|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.timeframe_actual|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.budget_target|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.budget_actual|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.interpretation|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.issues_unaddressed|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.facilitating_factors|linebreaksbr|default:'-' }}</td>
+                      <td>{{ activity.agreements|linebreaksbr|default:'-' }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="11">No activities recorded.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </article>
+          {% endfor %}
+        {% else %}
+          <p class="muted">No projects submitted.</p>
+        {% endif %}
+      </section>
+    {% elif current_tab == 'pct' %}
+      <section class="card">
+        <h3>% Implementation</h3>
+        {% if pct_rows %}
+          <table>
+            <thead>
+              <tr>
+                <th>Area of Concern</th>
+                <th>Implementation %</th>
+                <th>Key Action Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in pct_rows %}
+                <tr>
+                  <td>{{ row.get_area_display }}</td>
+                  <td>{{ row.percent|default_if_none:'-' }}</td>
+                  <td>{{ row.action_points|linebreaksbr|default:'-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No PCT data submitted.</p>
+        {% endif %}
+      </section>
+    {% elif current_tab == 'slp' %}
+      <section class="card">
+        <h3>SLP - Learner Progress</h3>
+        {% if slp_rows %}
+          <div class="table-scroll">
+            <table class="table slp-table">
+              <thead>
+                <tr>
+                  <th class="slp-col-grade">Grade</th>
+                  <th class="slp-col-subject">Subject</th>
+                  <th class="slp-col-offered">Offered</th>
+                  <th class="slp-col-enrolment">Enrolment</th>
+                  <th class="slp-col-metric">DNME</th>
+                  <th class="slp-col-metric">FS</th>
+                  <th class="slp-col-metric">S</th>
+                  <th class="slp-col-metric">VS</th>
+                  <th class="slp-col-metric">O</th>
+                  <th class="slp-col-llc">Top 3 LLC</th>
+                  <th class="slp-col-intervention">Intervention Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in slp_rows %}
+                  <tr>
+                    <td class="slp-col-grade">{{ row.grade_label }}</td>
+                    <td class="slp-col-subject">{{ row.get_subject_display }}</td>
+                    <td class="slp-col-offered">{% if row.is_offered %}Yes{% else %}<span class="muted">Not offered</span>{% endif %}</td>
+                    <td class="slp-col-enrolment">{% if row.is_offered %}{{ row.enrolment|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-metric">{% if row.is_offered %}{{ row.dnme|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-metric">{% if row.is_offered %}{{ row.fs|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-metric">{% if row.is_offered %}{{ row.s|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-metric">{% if row.is_offered %}{{ row.vs|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-metric">{% if row.is_offered %}{{ row.o|default:'-' }}{% else %}-{% endif %}</td>
+                    <td class="slp-col-llc">{{ row.top_three_llc|linebreaksbr|default:'-' }}</td>
+                    <td class="slp-col-intervention">{{ row.intervention_plan|linebreaksbr|default:'-' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="muted">No SLP learner data submitted.</p>
+        {% endif %}
+
+        {% if slp_llc_entries %}
+          <div class="table-scroll review-spacer">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Least Learned Competency</th>
+                  <th>Planned Intervention</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for entry in slp_llc_entries %}
+                  <tr>
+                    <td>{{ entry.order }}</td>
+                    <td>{{ entry.llc_description|linebreaksbr|default:'-' }}</td>
+                    <td>{{ entry.intervention|linebreaksbr|default:'-' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+
+        {% if slp_dnme_summary %}
+        <section class="card review-subcard review-spacer slp-summary-column slp-summary-column--dnme" aria-label="Top 5 Highest DNME">
+          <h4>Top 5 Grade Levels with the Highest DNME</h4>
+          <div class="slp-summary-grid">
+            {% for subject, entries in slp_dnme_summary.items %}
+            <section class="slp-summary-subject">
+              <h6>{{ subject }}</h6>
+              <ul class="slp-summary-list">
+                {% for item in entries %}
+                <li class="slp-summary-item">
+                  <span class="slp-summary-grade">{{ item.grade }}</span>
+                  <span class="slp-summary-count"><strong>{{ item.count }}</strong><span class="slp-summary-pct">{{ item.pct }}%</span></span>
+                </li>
+                {% endfor %}
+              </ul>
+            </section>
+            {% endfor %}
+          </div>
+          {# Removed Suggested DNME Action Focus per user request #}
+        </section>
+        {% endif %}
+
+        {% if slp_outstanding_summary %}
+        <section class="card review-subcard review-spacer slp-summary-column slp-summary-column--outstanding" aria-label="Top 5 Highest Outstanding">
+          <h4>Top 5 Grade Levels with the Highest Outstanding</h4>
+          <div class="slp-summary-grid">
+            {% for subject, entries in slp_outstanding_summary.items %}
+            <section class="slp-summary-subject">
+              <h6>{{ subject }}</h6>
+              <ul class="slp-summary-list">
+                {% for item in entries %}
+                <li class="slp-summary-item">
+                  <span class="slp-summary-grade">{{ item.grade }}</span>
+                  <span class="slp-summary-count"><strong>{{ item.count }}</strong><span class="slp-summary-pct">{{ item.pct }}%</span></span>
+                </li>
+                {% endfor %}
+              </ul>
+            </section>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
+        
+      </section>
+    {% elif current_tab == 'reading' %}
+      <section class="card">
+        <h3>Reading - CRLA</h3>
+        {% if reading_crla %}
+          <table>
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Timing</th>
+                <th>Subject</th>
+                <th>Band</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in reading_crla %}
+                <tr>
+                  <td>{{ entry.get_level_display }}</td>
+                  <td>{{ entry.get_timing_display }}</td>
+                  <td>{{ entry.get_subject_display }}</td>
+                  <td>{{ entry.get_band_display }}</td>
+                  <td>{{ entry.count|default:'-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No CRLA entries submitted.</p>
+        {% endif %}
+        <h3 class="section-title">Reading - PHILIRI</h3>
+        {% if reading_philiri %}
+          <table>
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>Timing</th>
+                <th>Language</th>
+                <th>Band 4-7</th>
+                <th>Band 5-8</th>
+                <th>Band 6-9</th>
+                <th>Band 10</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in reading_philiri %}
+                <tr>
+                  <td>{{ entry.get_level_display }}</td>
+                  <td>{{ entry.get_timing_display }}</td>
+                  <td>{{ entry.get_language_display }}</td>
+                  <td>{{ entry.band_4_7|default:'-' }}</td>
+                  <td>{{ entry.band_5_8|default:'-' }}</td>
+                  <td>{{ entry.band_6_9|default:'-' }}</td>
+                  <td>{{ entry.band_10|default:'-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No PHILIRI data submitted.</p>
+        {% endif %}
+        <h3 class="section-title">Reading Interventions</h3>
+        {% if reading_interventions %}
+          <table>
+            <thead><tr><th>#</th><th>Description</th></tr></thead>
+            <tbody>
+              {% for entry in reading_interventions %}
+                <tr><td>{{ entry.order }}</td><td>{{ entry.description|linebreaksbr|default:'-' }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No interventions listed.</p>
+        {% endif %}
+      </section>
+    {% elif current_tab == 'rma' %}
+      <section class="card">
+        <h3>RMA Results</h3>
+        {% if rma_rows %}
+          <table>
+            <thead>
+              <tr>
+                <th>Grade</th>
+                <th>Enrolment</th>
+                <th>Not Proficient (Below 25%)</th>
+                <th>Low Proficient (25%-49%)</th>
+                <th>Nearly Proficient (50%-74%)</th>
+                <th>Proficient (75%-84%)</th>
+                <th>At Grade Level (Above 85%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rma_rows %}
+                <tr>
+                  <td>{{ row.get_grade_label_display|default:row.grade_label }}</td>
+                  <td>{{ row.enrolment|default:'-' }}</td>
+                  <td>{{ row.emerging_not_proficient|default:'-' }}</td>
+                  <td>{{ row.emerging_low_proficient|default:'-' }}</td>
+                  <td>{{ row.developing_nearly_proficient|default:'-' }}</td>
+                  <td>{{ row.transitioning_proficient|default:'-' }}</td>
+                  <td>{{ row.at_grade_level|default:'-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No RMA rows submitted.</p>
+        {% endif %}
+        <h3 class="section-title">RMA Interventions</h3>
+        {% if rma_interventions %}
+          <table>
+            <thead><tr><th>#</th><th>Description</th></tr></thead>
+            <tbody>
+              {% for entry in rma_interventions %}
+                <tr><td>{{ entry.order }}</td><td>{{ entry.description|linebreaksbr|default:'-' }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No interventions provided.</p>
+        {% endif %}
+      </section>
+    {% elif current_tab == 'supervision' %}
+      <section class="card">
+        <h3>Instructional Supervision &amp; TA</h3>
+        {% if supervision_rows %}
+          <table>
+            <thead>
+              <tr>
+                <th>Grade / Teacher</th>
+                <th>Teachers Supervised / Observed / TA</th>
+                <th>Intervention / Support</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in supervision_rows %}
+                <tr>
+                  <td>{{ row.grade_label|default:'-' }}</td>
+                  <td>{{ row.teachers_supervised_observed_ta|default:'-' }}</td>
+                  <td>{{ row.intervention_support_provided|linebreaksbr|default:'-' }}</td>
+                  <td>{{ row.result|linebreaksbr|default:'-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No supervision records submitted.</p>
+        {% endif %}
+        <h3 class="section-title">Signatories</h3>
+        {% if signatories %}
+          <p><strong>School Head:</strong> {{ signatories.prepared_by|default:'-' }}</p>
+        {% else %}
+          <p class="muted">No signatories provided.</p>
+        {% endif %}
+      </section>
+    {% elif current_tab == 'adm' %}
+      <section class="card">
+        <h3>ADM One-Stop-Shop &amp; EiE</h3>
+        
+        {# Check if ADM is offered #}
+        {% if adm_header and not adm_header.is_offered %}
+          <div class="card" style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 1rem; margin-bottom: 1rem;">
+            <p style="margin: 0; color: #92400e;">
+              <strong>ℹ️ Alternative Delivery Mode not implemented</strong><br>
+              <span style="font-size: 0.875rem;">This school has indicated that they do not implement ADM programs for this period.</span>
+            </p>
+          </div>
+        {% elif adm_rows %}
+          {% for row in adm_rows %}
+            <article class="card" style="margin-top:1rem;">
+              <h4>Record {{ forloop.counter }}</h4>
+              <p><strong>PPAS Conducted:</strong> {{ row.ppas_conducted|linebreaksbr|default:'-' }}</p>
+              <div class="grid-two">
+                <p><strong>Physical Target:</strong> {{ row.ppas_physical_target|default:'-' }}</p>
+                <p><strong>Physical Actual:</strong> {{ row.ppas_physical_actual|default:'-' }}</p>
+                <p><strong>Physical %:</strong> {{ row.ppas_physical_percent|default_if_none:'-' }}</p>
+              </div>
+              <div class="grid-two">
+                <p><strong>Funds Downloaded:</strong> {{ row.funds_downloaded|default:'-' }}</p>
+                <p><strong>Funds Obligated:</strong> {{ row.funds_obligated|default:'-' }}</p>
+                <p><strong>Funds Unobligated:</strong> {{ row.funds_unobligated|default:'-' }}</p>
+                <p><strong>% Obligated:</strong> {{ row.funds_percent_obligated|default_if_none:'-' }}</p>
+                <p><strong>Burn Rate %:</strong> {{ row.funds_percent_burn_rate|default_if_none:'-' }}</p>
+              </div>
+              <hr>
+              <p><strong>Q1:</strong> {{ row.q1_response|linebreaksbr|default:'-' }}</p>
+              <p><strong>Q2:</strong> {{ row.q2_response|linebreaksbr|default:'-' }}</p>
+              <p><strong>Q3:</strong> {{ row.q3_response|linebreaksbr|default:'-' }}</p>
+              <p><strong>Q4:</strong> {{ row.q4_response|linebreaksbr|default:'-' }}</p>
+              <p><strong>Q5:</strong> {{ row.q5_response|linebreaksbr|default:'-' }}</p>
+            </article>
+          {% endfor %}
+        {% else %}
+          <p class="muted">No ADM records submitted.</p>
+        {% endif %}
+      </section>
+    {% endif %}
+  </body>
+</html>
+

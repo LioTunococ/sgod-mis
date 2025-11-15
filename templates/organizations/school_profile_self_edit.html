@@ -1,0 +1,83 @@
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Update School Profile</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  </head>
+  <body class="container">
+    {% include "includes/auth_nav.html" %}
+
+    <section class="card card--wide">
+      <div class="flex-between">
+        <div>
+          <a href="{{ back_url }}" class="muted">&larr; Back to dashboard</a>
+          <h1>Update School Profile</h1>
+          <p class="muted">
+            {{ school.name }}{% if school.district %} &middot; {{ school.district.name }}{% endif %}
+          </p>
+        </div>
+      </div>
+      {% include "includes/role_flag_badges.html" %}
+    </section>
+
+    <section class="card card--wide">
+      {% if messages %}
+        <ul class="message-list">
+          {% for message in messages %}
+            <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="form-errors">
+            {% for error in form.non_field_errors %}
+              <p>{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="form-field">
+          <label for="{{ form.head_name.id_for_label }}">School Head Name</label>
+          {{ form.head_name }}
+          {{ form.head_name.errors }}
+        </div>
+        <div class="form-field">
+          <label for="{{ form.head_contact.id_for_label }}">Contact Details</label>
+          {{ form.head_contact }}
+          <p class="muted">Include phone number or email address for quick coordination.</p>
+          {{ form.head_contact.errors }}
+        </div>
+        <div class="form-grid form-grid--two">
+          <div class="form-field">
+            <label for="{{ form.grade_span_start.id_for_label }}">Grade Span Start</label>
+            {{ form.grade_span_start }}
+            {{ form.grade_span_start.errors }}
+          </div>
+          <div class="form-field">
+            <label for="{{ form.grade_span_end.id_for_label }}">Grade Span End</label>
+            {{ form.grade_span_end }}
+            {{ form.grade_span_end.errors }}
+          </div>
+        </div>
+        <div class="form-field">
+          <label>SHS Strands Offered</label>
+          {{ form.shs_strands }}
+          <p class="muted">Check the SHS strands your school offers. Specialized SLP subjects will default accordingly.</p>
+          {{ form.shs_strands.errors }}
+        </div>
+        <div class="form-field">
+          <label for="{{ form.strands.id_for_label }}">Other Programs (optional)</label>
+          {{ form.strands }}
+          <p class="muted">Add other programs here (e.g., SPED, ALS). Comma-separated or JSON list.</p>
+          {{ form.strands.errors }}
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">Save changes</button>
+        </div>
+      </form>
+    </section>
+  </body>
+</html>

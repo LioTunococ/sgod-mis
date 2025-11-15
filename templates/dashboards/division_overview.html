@@ -1,0 +1,128 @@
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Division Command Center</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  </head>
+  <body class="container dashboards-page">
+    {% include "includes/auth_nav.html" %}
+
+    <section class="card card--wide">
+      <div class="flex-between">
+        <div>
+          <h1>Division Command Center</h1>
+          <p class="muted">Monitor completion, DNME trends, and ADM spending across sections and districts.</p>
+        </div>
+      </div>
+      {% include "includes/role_flag_badges.html" %}
+    </section>
+
+    <section class="card card--wide">
+      <form method="get" class="filters">
+        <label>Period
+          <select name="period_id" onchange="this.form.submit()">
+            {% for period in periods %}
+              <option value="{{ period.id }}"{% if selected_period and selected_period.id == period.id %} selected{% endif %}>{{ period.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>District
+          <select name="district_id" onchange="this.form.submit()">
+            <option value="">All districts</option>
+            {% for district in districts %}
+              <option value="{{ district.id }}"{% if selected_district_id == district.id %} selected{% endif %}>{{ district.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Section
+          <select name="section_code" onchange="this.form.submit()">
+            {% for section in sections %}
+              <option value="{{ section.code }}"{% if selected_section_code == section.code %} selected{% endif %}>{{ section.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div style="display:flex; align-items:flex-end;">
+          <button type="submit" class="btn btn--primary">Apply</button>
+        </div>
+      </form>
+    </section>
+
+    {% if summary_cards %}
+      <section class="card card--wide">
+        {% include "includes/dashboard_summary_strip.html" with cards=summary_cards %}
+      </section>
+    {% endif %}
+
+    <section class="card card--wide">
+      <h2>District performance</h2>
+      {% if kpi_rows %}
+        <div class="table-scroll">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>District</th>
+                <th>Total Schools</th>
+                <th>Submitted</th>
+                <th>Completion Rate %</th>
+                <th>DNME %</th>
+                <th>DNME Learners</th>
+                <th>Total Enrolment</th>
+                <th>Avg ADM Burn Rate %</th>
+                <th>PHILIRI Band 10 Total</th>
+                <th>School Heads / Strands</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in kpi_rows %}
+                <tr>
+                  <td>{{ row.district.name|default:"Unassigned" }}</td>
+                  <td>{{ row.total_schools }}</td>
+                  <td>{{ row.submitted_count }}</td>
+                  <td>{{ row.completion_rate }}</td>
+                  <td>{{ row.dnme_percent }}</td>
+                  <td>{{ row.total_dnme }}</td>
+                  <td>{{ row.total_enrolment }}</td>
+                  <td>{{ row.average_burn_rate }}</td>
+                  <td>{{ row.philiri_band10_total }}</td>
+                  <td>
+                    {% if row.school_profiles %}
+                      <ul class="list-unstyled list-spaced">
+                        {% for entry in row.school_profiles %}
+                          <li>
+                            <strong>{{ entry.school.name }}</strong>
+                            <div class="chip-row">
+                              {% if entry.missing_profile %}<span class="profile-chip profile-chip--warning">Profile missing</span>{% endif %}
+                              {% if entry.missing_head_name %}<span class="profile-chip profile-chip--warning">Head missing</span>{% endif %}
+                              {% if entry.missing_head_contact %}<span class="profile-chip profile-chip--muted">Contact missing</span>{% endif %}
+                              {% if entry.grade_span_warning %}<span class="profile-chip profile-chip--warning">Check grade span</span>{% endif %}
+                            </div>
+                            <div class="meta">
+                              {% if entry.head_name %}
+                                Head: {{ entry.head_name }}
+                              {% else %}
+                                Head not set
+                              {% endif %}
+                              {% if entry.head_contact %}<br>{{ entry.head_contact }}{% endif %}
+                              {% if entry.strands %}<br>Strands: {{ entry.strands }}{% endif %}
+                              {% if entry.grade_span %}<br>Grade span {{ entry.grade_span }}{% endif %}
+                            </div>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <span class="muted">No profile data</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">No KPI data available for the selected filters.</p>
+      {% endif %}
+    </section>
+  </body>
+</html>

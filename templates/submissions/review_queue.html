@@ -1,0 +1,208 @@
+{% load submission_tags %}
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{{ section.name }} - Review Queue</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  </head>
+  <body class="container dashboards-page">
+    {% include "includes/auth_nav.html" %}
+
+    <div class="portal-layout">
+      <aside class="portal-sidebar">
+        <section class="portal-sidebar__section portal-sidebar__section--surface">
+          <span class="portal-sidebar__title">Section</span>
+          <div>
+            <strong>{{ section.name }}</strong>
+            <p class="muted">{{ section.code }}</p>
+          </div>
+          <form method="get" class="portal-sidebar__form">
+            <input type="hidden" name="tab" value="{{ tab }}">
+            {% if search_query %}
+              <input type="hidden" name="q" value="{{ search_query }}">
+            {% endif %}
+            
+            <!-- School Year Filter -->
+            <label for="sidebar-school-year">School Year</label>
+            <select id="sidebar-school-year" name="school_year" onchange="this.form.submit()">
+              <option value="">All School Years</option>
+              {% for year in available_school_years %}
+                <option value="{{ year }}"{% if selected_school_year|default:'' == year|stringformat:'s' %} selected{% endif %}>
+                  SY {{ year }}-{{ year|add:1 }}
+                </option>
+              {% endfor %}
+            </select>
+            
+            <!-- Quarter Filter -->
+            <label for="sidebar-quarter">Quarter</label>
+            <select id="sidebar-quarter" name="quarter" onchange="this.form.submit()">
+              <option value="">All Quarters</option>
+              {% for quarter_code, quarter_label in available_quarters %}
+                <option value="{{ quarter_code }}"{% if selected_quarter == quarter_code %} selected{% endif %}>
+                  {{ quarter_label }}
+                </option>
+              {% endfor %}
+            </select>
+          </form>
+          <div class="portal-sidebar__nav">
+            <a class="portal-sidebar__link{% if tab == 'pending' %} portal-sidebar__link--active{% endif %}" href="?tab=pending{% if selected_school_year %}&school_year={{ selected_school_year }}{% endif %}{% if selected_quarter %}&quarter={{ selected_quarter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}">
+              Pending ({{ tab_counts.pending }})
+            </a>
+            <a class="portal-sidebar__link{% if tab == 'returned' %} portal-sidebar__link--active{% endif %}" href="?tab=returned{% if selected_school_year %}&school_year={{ selected_school_year }}{% endif %}{% if selected_quarter %}&quarter={{ selected_quarter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}">
+              Returned ({{ tab_counts.returned }})
+            </a>
+            <a class="portal-sidebar__link{% if tab == 'noted' %} portal-sidebar__link--active{% endif %}" href="?tab=noted{% if selected_school_year %}&school_year={{ selected_school_year }}{% endif %}{% if selected_quarter %}&quarter={{ selected_quarter }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}">
+              Noted ({{ tab_counts.noted }})
+            </a>
+          </div>
+        </section>
+
+        <section class="portal-sidebar__section portal-sidebar__section--surface">
+          <span class="portal-sidebar__title">Queue Tools</span>
+          <div class="portal-sidebar__list">
+            <a class="portal-sidebar__link" href="{{ district_dashboard_url }}?section={{ section.code }}">Who Didn't Submit</a>
+            <a class="portal-sidebar__link" href="{{ smme_dashboard_url }}">SMME KPI Dashboard</a>
+            {% if role_flags.is_section_admin %}
+              <a class="portal-sidebar__link" href="{% url 'manage_section_forms' %}">Manage Section Forms</a>
+            {% endif %}
+          </div>
+        </section>
+
+      </aside>
+
+      <div class="portal-content">
+        <header class="queue-header">
+          <div class="queue-header__texts">
+            <h1>Review Queue</h1>
+            <p class="muted">Track submissions that need action for {{ section.name }}.</p>
+            {% if selected_period %}
+              <span class="queue-header__meta">Period: {{ selected_period.label }}</span>
+            {% endif %}
+          </div>
+        </header>
+        {% include "includes/role_flag_badges.html" %}
+
+        <section class="card card--wide">
+          <div class="queue-toolbar">
+            <div class="queue-toolbar__info">
+              <h2>{{ tab|capfirst }} submissions</h2>
+              {% if search_query %}
+                <p class="muted">Matching “{{ search_query }}”.</p>
+              {% endif %}
+            </div>
+            <form method="get" class="queue-toolbar__search">
+              <input type="hidden" name="tab" value="{{ tab }}">
+              {% if selected_school_year %}
+                <input type="hidden" name="school_year" value="{{ selected_school_year }}">
+              {% endif %}
+              {% if selected_quarter %}
+                <input type="hidden" name="quarter" value="{{ selected_quarter }}">
+              {% endif %}
+              <label for="queue-search" class="queue-toolbar__label">Search</label>
+              <div class="queue-search-input">
+                <input id="queue-search" type="search" name="q" value="{{ search_query }}" placeholder="Search school or form title">
+                {% if search_query %}
+                  <a class="queue-search-clear" href="?tab={{ tab }}{% if selected_school_year %}&school_year={{ selected_school_year }}{% endif %}{% if selected_quarter %}&quarter={{ selected_quarter }}{% endif %}">Clear</a>
+                {% endif %}
+              </div>
+              <button type="submit" class="btn btn--primary btn--sm">Search</button>
+            </form>
+          </div>
+          {% if submissions %}
+            <div class="table-scroll">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>School</th>
+                    <th>Form</th>
+                    <th>Period</th>
+                    <th>Reading Timing</th>
+                    <th>Submitted</th>
+                    <th>Status</th>
+                    <th style="width:160px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in submissions %}
+                    <tr>
+                      <td>{{ s.school.name }}</td>
+                      <td>{{ s.form_template.title }}</td>
+                      <td>{{ s.period.label }}</td>
+                      <td>
+                        {% with q=s.period.quarter_tag %}
+                          {% if q == 'Q1' %}
+                            <span class="muted">EOSY Results - Quarter 1</span>
+                          {% elif q == 'Q4' %}
+                            <span class="muted">MOSY Results - Quarter 4</span>
+                          {% else %}
+                            <span class="muted">BOSY Results - Quarter 2 or 3 Depends on what quarter was selected</span>
+                          {% endif %}
+                        {% endwith %}
+                      </td>
+                      <td>{{ s.submitted_at|date:"M j, Y g:i a"|default:"-" }}</td>
+                      <td>
+                        {% status_badge s.status as badge %}
+                        <span class="status-pill status-pill--{{ s.status }}">{{ badge.label }}</span>
+                      </td>
+                      <td class="queue-actions">
+                        <a class="btn btn--primary btn--sm" href="{% url 'review_detail' s.id %}">Review</a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="muted">No submissions match the current filters.</p>
+          {% endif %}
+        </section>
+      </div>
+    </div>
+    
+    <script>
+      // Preserve filter values when changing dropdowns
+      document.addEventListener('DOMContentLoaded', function() {
+        const schoolYearSelect = document.getElementById('sidebar-school-year');
+        const quarterSelect = document.getElementById('sidebar-quarter');
+        const form = document.querySelector('.portal-sidebar__form');
+        
+        function updateForm() {
+          // Create hidden inputs to preserve both filter values
+          const existingSchoolYear = form.querySelector('input[name="school_year"]');
+          const existingQuarter = form.querySelector('input[name="quarter"]');
+          
+          if (existingSchoolYear) existingSchoolYear.remove();
+          if (existingQuarter) existingQuarter.remove();
+          
+          if (schoolYearSelect.value) {
+            const schoolYearInput = document.createElement('input');
+            schoolYearInput.type = 'hidden';
+            schoolYearInput.name = 'school_year';
+            schoolYearInput.value = schoolYearSelect.value;
+            form.appendChild(schoolYearInput);
+          }
+          
+          if (quarterSelect.value) {
+            const quarterInput = document.createElement('input');
+            quarterInput.type = 'hidden';
+            quarterInput.name = 'quarter';
+            quarterInput.value = quarterSelect.value;
+            form.appendChild(quarterInput);
+          }
+        }
+        
+        schoolYearSelect.addEventListener('change', function() {
+          updateForm();
+          form.submit();
+        });
+        
+        quarterSelect.addEventListener('change', function() {
+          updateForm();
+          form.submit();
+        });
+      });
+    </script>
+  </body>
+</html>

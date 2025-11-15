@@ -1,0 +1,24 @@
+{% comment %}
+Expects `cards` iterable with dictionaries including:
+- label (str)
+- value (str/number)
+- hint (optional str)
+- tone (optional str: success, warning, danger, info)
+- cta (optional dict with `label`, `url`)
+{% endcomment %}
+{% if cards %}
+  <div class="dashboard-strip">
+    {% for card in cards %}
+      <article class="dashboard-strip__card{% if card.tone %} dashboard-strip__card--{{ card.tone }}{% endif %}">
+        <span class="dashboard-strip__label">{{ card.label }}</span>
+        <span class="dashboard-strip__value">{{ card.value }}</span>
+        {% if card.hint %}
+          <span class="dashboard-strip__hint">{{ card.hint }}</span>
+        {% endif %}
+        {% if card.cta %}
+          <a class="dashboard-strip__cta btn btn--secondary" href="{{ card.cta.url }}">{{ card.cta.label }}</a>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+{% endif %}

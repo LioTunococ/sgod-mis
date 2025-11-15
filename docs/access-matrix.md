@@ -1,28 +1,33 @@
-﻿# Access Matrix (Phase 1: Reports Only)
+# Access Matrix (Phase 1)
 
-**Roles in use now**
-- **SchoolHead** — single account per school; creates, edits, submits reports; sees Noted/Returned remarks.
-- **SectionAdmin:<code>** — reviews submitted reports for their section; can **Note** or **Return**.
-- *(Placeholders, no actions in Phase 1)* **SGODAdmin**, **ASDS**, **SDS** — kept for future plan/proposal workflows.
+## Roles
+- **SchoolHead** - creates/edits submissions, sees remarks, resubmits when returned.
+- **SectionAdmin** - reviews submissions for their section; can note/return; sees dashboards for their section.
+- **PSDS** - reviews district-wide metrics (assigned districts), can open reviewer dashboards and queue in read-only mode.
+- **SGOD Admin/Chief** - division-wide overview; inherits section admin tooling for overrides.
+- **ASDS/SDS** - reserved for future plan workflows.
 
-## Screen Access
+## Screen & Action Access
+| Screen / Action                            | SchoolHead             | SectionAdmin          | PSDS                       | SGODAdmin                |
+|--------------------------------------------|------------------------|-----------------------|----------------------------|--------------------------|
+| School landing dashboard                   | Yes                    | Yes (queue widgets)   | Yes                        | Yes                      |
+| Section open-forms list                    | Yes (assigned school)  | View (cannot start)   | No                         | No *                     |
+| Create/edit draft submission               | Yes                    | No                    | No                         | Yes *                    |
+| Submit submission                          | Yes                    | No                    | No                         | Yes *                    |
+| View submitted/returned/noted submission   | Yes (own school)       | Yes (section)         | View (district scope)      | Yes                      |
+| Note submission                            | No                     | Yes                   | No                         | Yes                      |
+| Return submission                          | No                     | Yes                   | No                         | Yes                      |
+| Review queue                               | No                     | Yes                   | View (district filtered)   | Yes                      |
+| "Who Didn't Submit" dashboard              | No                     | View (section scope)  | View (district scope)      | Yes (division scope)     |
+| SMME KPI dashboard                         | No                     | View (section scope)  | View (district scope)      | Yes (division selector)  |
 
-| Screen / Action                             | SchoolHead | SectionAdmin:<code> | SGODAdmin | ASDS | SDS |
-|---------------------------------------------|-----------:|---------------------:|----------:|-----:|----:|
-| Dashboard (school landing)                   | ✅         | 🔒                    | 🔒        | 🔒   | 🔒  |
-| Section list (6 sections)                    | ✅         | 🔒                    | 🔒        | 🔒   | 🔒  |
-| Section → Open forms list                    | ✅         | 🔒                    | 🔒        | 🔒   | 🔒  |
-| Create/Edit Draft report                     | ✅         | 🔒                    | 🔒        | 🔒   | 🔒  |
-| Submit report                                | ✅         | 🔒                    | 🔒        | 🔒   | 🔒  |
-| View Submitted/Noted/Returned report         | ✅         | ✅                    | 🔒        | 🔒   | 🔒  |
-| Note a report (mark as NOTED + remarks)      | 🔒         | ✅                    | 🔒        | 🔒   | 🔒  |
-| Return report to school w/ remarks           | 🔒         | ✅                    | 🔒        | 🔒   | 🔒  |
-| “Who Didn’t Submit” dashboard (per section)  | 🔒         | ✅                    | 🔒        | 🔒   | 🔒  |
+Legend: Yes = authorised, No = not authorised, View = read-only.  
+*SGOD Admin inherits Section Admin capabilities for override scenarios but typically does not initiate school submissions.
 
-Legend: ✅ allowed, 🔒 not allowed
+## Status Transitions
+- DRAFT -> SUBMITTED: SchoolHead submits.
+- SUBMITTED -> RETURNED: SectionAdmin returns with remarks.
+- SUBMITTED -> NOTED: SectionAdmin notes (final).
+- RETURNED -> SUBMITTED: SchoolHead re-submits after editing.
 
-## Status Transitions (Reports)
-- `DRAFT` → **SchoolHead: Submit** → `SUBMITTED`
-- **SectionAdmin:**  
-  - **Note** → `NOTED` (School sees Noted + remarks)  
-  - **Return** → `RETURNED` (School can edit and resubmit)
+Future phases will extend SGOD Admin/Division Admin with school/user management and expand ASDS/SDS actions.

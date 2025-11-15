@@ -1,0 +1,344 @@
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Manage Section Forms</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  </head>
+  <body class="container dashboards-page">
+    {% include "includes/auth_nav.html" %}
+
+    <section class="card card--wide">
+      <h1>Section Form Management</h1>
+      <p class="muted">
+        Create new form templates and adjust opening schedules for the sections you manage.
+      </p>
+      {% include "includes/role_flag_badges.html" %}
+    </section>
+
+    {% if messages %}
+      <section class="card card--wide">
+        <ul class="message-list">
+          {% for message in messages %}
+            <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    <section class="card card--wide">
+      <form method="get" class="filters">
+        <label for="section-filter">Section</label>
+        <select id="section-filter" name="section" onchange="this.form.submit()">
+          <option value="">All sections</option>
+          {% for section in sections %}
+            <option value="{{ section.code }}"{% if selected_section_code == section.code %} selected{% endif %}>
+              {{ section.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </form>
+  </section>
+
+  <section class="card card--wide">
+    <h2>Create new form</h2>
+    <p class="muted">Define the form template details and availability window.</p>
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create">
+        {% if create_form.non_field_errors %}
+          <div class="form-errors">
+            {% for error in create_form.non_field_errors %}
+              <p>{{ error }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="form-grid form-grid--two">
+          <div class="form-field">
+            <label for="{{ create_form.section.id_for_label }}">Section</label>
+            {{ create_form.section }}
+            {{ create_form.section.errors }}
+          </div>
+          <div class="form-field">
+            <label for="{{ create_form.code.id_for_label }}">Form code</label>
+            <div id="code-field-wrap">
+              {{ create_form.code }}
+              <div id="code-static" class="muted" style="display:none;"></div>
+            </div>
+            {{ create_form.code.errors }}
+            <small class="muted">Leave blank to auto-generate (SMEA Form 1). A preview appears when enabled.</small>
+          </div>
+        </div>
+        <div class="form-grid form-grid--two">
+          <div class="form-field">
+            <label for="{{ create_form.title.id_for_label }}">Title</label>
+            <div id="smea-title-wrap">
+              {{ create_form.title }}
+            </div>
+            {{ create_form.title.errors }}
+            <div style="margin-top:.5rem;">
+              <label>
+                {{ create_form.use_smea_form1 }}
+                <span>Use SMEA Form 1 (fixed title)</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="{{ create_form.period_type.id_for_label }}">Period type</label>
+            {{ create_form.period_type }}
+            {{ create_form.period_type.errors }}
+          </div>
+        </div>
+        <div class="form-grid form-grid--two">
+          <div class="form-field">
+            <label for="{{ create_form.school_year.id_for_label }}">School Year</label>
+            {{ create_form.school_year }}
+            {{ create_form.school_year.errors }}
+            <small class="muted">Optional: For KPI dashboard filtering</small>
+          </div>
+          <div class="form-field">
+            <label for="{{ create_form.quarter.id_for_label }}">Quarter</label>
+            {{ create_form.quarter }}
+            {{ create_form.quarter.errors }}
+            <small class="muted">Optional: For KPI dashboard filtering</small>
+            <div class="muted" style="margin-top:.25rem;">
+              Reading timing is derived from Quarter for submissions: Q1 → EOSY, Q2/Q3 → BOSY, Q4 → MOSY.
+            </div>
+          </div>
+        </div>
+        <div class="form-field">
+          <label>Tabs to include</label>
+          <div class="checkbox-grid">
+            {{ create_form.enabled_tabs }}
+          </div>
+          {{ create_form.enabled_tabs.errors }}
+          <small class="muted">Only the selected tabs will be shown to schools.</small>
+        </div>
+        <div class="form-grid form-grid--two">
+          <div class="form-field">
+            <label for="{{ create_form.open_at.id_for_label }}">Open date</label>
+            {{ create_form.open_at }}
+            {{ create_form.open_at.errors }}
+          </div>
+          <div class="form-field">
+            <label for="{{ create_form.close_at.id_for_label }}">Close date</label>
+            {{ create_form.close_at }}
+            {{ create_form.close_at.errors }}
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="{{ create_form.is_active.id_for_label }}">Status</label>
+          <div>
+            {{ create_form.is_active }}
+            <span class="muted">Keep active to make the form selectable for submissions.</span>
+          </div>
+          {{ create_form.is_active.errors }}
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">Create form</button>
+        </div>
+      </form>
+    </section>
+
+    <script>
+      // Build a mapping of section PK to section code for preview generation
+      const SECTION_CODE_MAP = {
+        {% for section in sections %}
+          "{{ section.pk }}": "{{ section.code|lower }}"{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      };
+      (function() {
+        const checkbox = document.getElementById('{{ create_form.use_smea_form1.auto_id }}');
+        const titleWrap = document.getElementById('smea-title-wrap');
+        const titleInput = titleWrap ? titleWrap.querySelector('input, textarea, select') : null;
+        const codeWrap = document.getElementById('code-field-wrap');
+        const codeInput = document.getElementById('{{ create_form.code.auto_id }}');
+        const codeStatic = document.getElementById('code-static');
+        let staticTitleEl = null;
+
+        function slugify(text) {
+          return (text || '')
+            .toString()
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/[^a-z0-9\-\s_]/g, '')
+            .replace(/[\s_]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        }
+
+        function generateCodePreview() {
+          const sectionSelect = document.getElementById('{{ create_form.section.auto_id }}');
+          const yearSelect = document.getElementById('{{ create_form.school_year.auto_id }}');
+          const quarterSelect = document.getElementById('{{ create_form.quarter.auto_id }}');
+          const sectionPk = sectionSelect ? sectionSelect.value : '';
+          const sectionCode = SECTION_CODE_MAP[sectionPk] || '';
+          const year = yearSelect ? (yearSelect.value || '') : '';
+          const quarter = quarterSelect ? (quarterSelect.value || '') : '';
+          const parts = ['smea1'];
+          if (sectionCode) parts.push(sectionCode);
+          if (year) parts.push('sy' + year);
+          if (quarter) parts.push(quarter.toLowerCase());
+          const preview = slugify(parts.join('-')) || 'smea1';
+          return preview;
+        }
+
+        function updateTitleState() {
+          if (!titleWrap) return;
+          const useFixed = checkbox && checkbox.checked;
+          if (useFixed) {
+            if (titleInput) { titleInput.disabled = true; titleInput.style.display = 'none'; }
+            if (!staticTitleEl) {
+              staticTitleEl = document.createElement('div');
+              staticTitleEl.className = 'muted';
+              staticTitleEl.textContent = 'SMEA Form 1';
+              titleWrap.appendChild(staticTitleEl);
+            }
+            if (codeWrap && codeInput && codeStatic) {
+              // Hide and disable the code input to avoid HTML5 required validation
+              codeInput.style.display = 'none';
+              codeInput.disabled = true;
+              if (codeInput.hasAttribute('required')) {
+                codeInput.removeAttribute('required');
+                codeInput.dataset.wasRequired = '1';
+              }
+              codeStatic.style.display = '';
+              codeStatic.textContent = 'Code preview: ' + generateCodePreview();
+            }
+          } else {
+            if (titleInput) { titleInput.disabled = false; titleInput.style.display = ''; }
+            if (staticTitleEl && staticTitleEl.parentNode) {
+              staticTitleEl.parentNode.removeChild(staticTitleEl);
+              staticTitleEl = null;
+            }
+            if (codeWrap && codeInput && codeStatic) {
+              codeInput.style.display = '';
+              codeInput.disabled = false;
+              if (codeInput.dataset.wasRequired === '1') {
+                codeInput.setAttribute('required', '');
+                delete codeInput.dataset.wasRequired;
+              }
+              codeStatic.style.display = 'none';
+            }
+          }
+        }
+        if (checkbox) {
+          checkbox.addEventListener('change', updateTitleState);
+          updateTitleState();
+        }
+
+        // Update preview when dependencies change
+        const sectionSelect = document.getElementById('{{ create_form.section.auto_id }}');
+        const yearSelect = document.getElementById('{{ create_form.school_year.auto_id }}');
+        const quarterSelect = document.getElementById('{{ create_form.quarter.auto_id }}');
+        function updatePreviewIfVisible() {
+          if (checkbox && checkbox.checked && codeStatic && codeStatic.style.display !== 'none') {
+            codeStatic.textContent = 'Code preview: ' + generateCodePreview();
+          }
+        }
+        [sectionSelect, yearSelect, quarterSelect].forEach(function(el){ if (el) el.addEventListener('change', updatePreviewIfVisible); });
+      })();
+    </script>
+
+    <section class="card card--wide">
+      <h2>Existing forms</h2>
+      <p class="muted">
+        Adjust schedules or toggle availability. Deleting a form will remove the template and all submitted data tied to it.
+      </p>
+      {% if form_rows %}
+        <div class="table-scroll">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Section</th>
+                <th>Form</th>
+                <th>Schedule</th>
+                <th style="width:200px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for template, schedule_form in form_rows %}
+                <tr>
+                  <td>
+                    <strong>{{ template.section.name }}</strong>
+                    <div class="muted">{{ template.section.code }}</div>
+                  </td>
+                  <td>
+                    <strong>{{ template.title }}</strong>
+                    <div class="muted">
+                      {{ template.code }} &middot; {{ template.get_period_type_display }}
+                      {% if template.school_year %}
+                        &middot; SY {{ template.school_year }}-{{ template.school_year|add:1 }}
+                      {% endif %}
+                      {% if template.quarter_filter %}
+                        &middot; {{ template.quarter_filter }}
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <form method="post" class="form-grid">
+                      {% csrf_token %}
+                      <input type="hidden" name="form_id" value="{{ template.id }}">
+                      {% if schedule_form.non_field_errors %}
+                        <div class="form-errors">
+                          {% for error in schedule_form.non_field_errors %}
+                            <p>{{ error }}</p>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                      <div class="form-grid form-grid--two">
+                        <div class="form-field">
+                          <label for="{{ schedule_form.open_at.id_for_label }}">Open date</label>
+                          {{ schedule_form.open_at }}
+                          {{ schedule_form.open_at.errors }}
+                        </div>
+                        <div class="form-field">
+                          <label for="{{ schedule_form.close_at.id_for_label }}">Close date</label>
+                          {{ schedule_form.close_at }}
+                          {{ schedule_form.close_at.errors }}
+                        </div>
+                      </div>
+                      <div class="form-field">
+                        <label for="{{ schedule_form.is_active.id_for_label }}">Active</label>
+                        {{ schedule_form.is_active }}
+                        {{ schedule_form.is_active.errors }}
+                      </div>
+                      <div class="form-actions">
+                        <button type="submit" name="action" value="update_schedule" class="btn btn--primary">
+                          Save schedule
+                        </button>
+                        <button type="submit" name="action" value="open_today" class="btn btn--secondary">
+                          Open today
+                        </button>
+                        <button type="submit" name="action" value="extend_close_7" class="btn btn--secondary">
+                          Extend close by 7 days
+                        </button>
+                        <button type="submit" name="action" value="close_today" class="btn btn--secondary">
+                          Close today
+                        </button>
+                        <button type="submit" name="action" value="delete_form" class="btn btn--danger"
+                                onclick="return confirm('Delete this form template and all associated submissions? This action cannot be undone.')">
+                          Delete form
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                  <td>
+                    <div class="muted">
+                      Opens {{ template.open_at|date:"M j, Y" }}<br>
+                      Closes {{ template.close_at|date:"M j, Y" }}<br>
+                      Status: {% if template.is_active %}Active{% else %}Inactive{% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted">No forms found for the selected filters.</p>
+      {% endif %}
+    </section>
+  </body>
+</html>

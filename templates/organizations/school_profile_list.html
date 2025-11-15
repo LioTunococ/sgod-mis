@@ -1,0 +1,111 @@
+{% load static %}
+{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>School Profiles</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <style>
+      body { font-family: system-ui, sans-serif; margin:2rem; max-width:1100px; }
+      h1 { margin-bottom:1rem; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { border:1px solid #e2e8f0; padding:.6rem; text-align:left; vertical-align:top; }
+      th { background:#f1f5f9; font-weight:600; }
+      a { color:#0b57d0; text-decoration:none; }
+      .muted { color:#64748b; font-size:.9rem; }
+      .badge { display:inline-block; padding:.25rem .6rem; border-radius:999px; background:#e2e8f0; font-size:.8rem; }
+    </style>
+  </head>
+  <body class="container">
+    {% include "includes/auth_nav.html" %}
+    <h1>School Profiles</h1>
+    <p class="muted">SGOD admins can maintain school head contacts, grade spans, and strands here.</p>
+
+    {% include "includes/role_flag_badges.html" %}
+
+    <form method="get" class="filters">
+      <div>
+        <label for="search-input" class="muted">Search</label>
+        <input id="search-input" type="search" name="q" value="{{ search_query }}" placeholder="School, code, or head name" style="width:100%; padding:.5rem .65rem; border-radius:.5rem; border:1px solid #cbd5f5;">
+      </div>
+      <div>
+        <label for="district-select" class="muted">District</label>
+        <select id="district-select" name="district" style="width:100%; padding:.5rem .65rem; border-radius:.5rem; border:1px solid #cbd5f5;">
+          <option value="">All districts</option>
+          {% for district in districts %}
+            <option value="{{ district.id }}"{% if selected_district == district.id|stringformat:'s' %} selected{% endif %}>{{ district.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="strand-select" class="muted">Strand / Program</label>
+        <select id="strand-select" name="strand" style="width:100%; padding:.5rem .65rem; border-radius:.5rem; border:1px solid #cbd5f5;">
+          <option value="">All strands</option>
+          {% for option in strand_options %}
+            <option value="{{ option }}"{% if selected_strand == option %} selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:.5rem;">
+        <button type="submit" class="btn btn--primary">Apply</button>
+        {% if search_query or selected_district or selected_strand %}
+          <a href="{% url 'organizations:school_profile_list' %}" class="btn btn--secondary">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if profiles %}
+      <p class="muted">{{ profiles|length }} profile{{ profiles|length|pluralize }} shown.</p>
+      <div class="table-scroll">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>School</th>
+            <th>Head / Contact</th>
+            <th>Grade Span</th>
+            <th>Strands</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for profile in profiles %}
+            <tr>
+              <td>
+                <strong>{{ profile.school.name }}</strong><br>
+                <span class="muted">{{ profile.school.code }}</span><br>
+                {% if profile.school.district %}
+                  <span class="badge">{{ profile.school.district.name }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if profile.head_name %}
+                  <div>{{ profile.head_name }}</div>
+                {% else %}
+                  <div class="muted">Head name not set</div>
+                {% endif %}
+                {% if profile.head_contact %}
+                  <div class="muted">{{ profile.head_contact }}</div>
+                {% endif %}
+              </td>
+              <td>{{ profile.grade_span_label|default:"-" }}</td>
+              <td>
+                {% if profile.strands %}
+                  {{ profile.strands|join:", " }}
+                {% else %}
+                  <span class="muted">Not specified</span>
+                {% endif %}
+              </td>
+              <td><a class="btn btn--secondary" href="{% url 'organizations:edit_school_profile' profile.id %}">Edit</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+            </table>
+    </div>
+    </div>
+    {% else %}
+      <p>No school profiles yet.</p>
+    {% endif %}
+  </body>
+</html>

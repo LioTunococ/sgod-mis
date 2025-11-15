@@ -1,0 +1,8 @@
+{% if role_flags %}
+  <div class="role-badges" aria-label="Your roles">
+    {% if role_flags.is_sgod_admin %}<span class="role-badge role-badge--admin">SGOD Admin</span>{% endif %}
+    {% if role_flags.is_section_admin %}<span class="role-badge role-badge--section">Section Admin</span>{% endif %}
+    {% if role_flags.is_psds %}<span class="role-badge role-badge--psds">PSDS</span>{% endif %}
+    {% if role_flags.is_school_head %}<span class="role-badge role-badge--school">School Head</span>{% endif %}
+  </div>
+{% endif %}

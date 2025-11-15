@@ -1,0 +1,143 @@
+<div class="integrated-section-card">
+  <div class="integrated-section-card__header">
+    <div>
+      <h3 class="integrated-section-card__title">{{ card.section.name }}</h3>
+      <p class="muted" style="font-size: 0.875rem; margin-top: 0.25rem;">{{ card.section.code }}</p>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 0.875rem; color: #6b7280;">
+        {% if card.drafts_count > 0 %}
+          <span style="color: #f59e0b; font-weight: 600;">{{ card.drafts_count }} in progress</span>
+        {% endif %}
+        {% if card.drafts_count > 0 and card.open_count > 0 %} • {% endif %}
+        {% if card.open_count > 0 %}
+          <span style="color: #059669; font-weight: 600;">{{ card.open_count }} available</span>
+        {% endif %}
+      </div>
+      {% if card.next_due %}
+        <div style="font-size: 0.8125rem; color: {% if card.next_due <= today %}#dc2626{% else %}#6b7280{% endif %}; margin-top: 0.25rem;">
+          Due {{ card.next_due|date:"M j, Y" }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if card.drafts %}
+    <div class="integrated-section-card__section">
+      <h4 style="font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.025em;">In Progress</h4>
+      {% for draft in card.drafts %}
+        <div class="draft-card-mini" style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                <span class="status-pill status-pill--{{ draft.submission.status }}" style="font-size: 0.75rem;">{{ draft.submission.get_status_display }}</span>
+                <span style="font-size: 0.8125rem; font-weight: 600; color: {% if draft.progress < 30 %}#dc2626{% elif draft.progress < 70 %}#f59e0b{% else %}#059669{% endif %};">
+                  {{ draft.progress }}%
+                </span>
+              </div>
+              <div style="font-size: 0.9375rem; font-weight: 600; color: #111827; margin-bottom: 0.25rem;">
+                {{ draft.submission.form_template.title }}
+              </div>
+              <div style="font-size: 0.8125rem; color: #6b7280;">
+                {% if draft.submission.period %}{{ draft.submission.period.label }} • {% endif %}
+                Updated {{ draft.submission.updated_at|date:"M j, Y g:i a" }}
+              </div>
+            </div>
+            <a class="btn btn--primary btn--sm" href="{% url 'edit_submission' draft.submission.id %}" style="white-space: nowrap;">
+              {% if draft.progress == 0 %}Start{% elif draft.progress == 100 %}Review{% else %}Continue{% endif %}
+            </a>
+          </div>
+          
+          <!-- Progress Bar -->
+          <div style="background: #e5e7eb; height: 0.375rem; border-radius: 0.25rem; overflow: hidden; margin-bottom: 0.75rem;">
+            <div style="background: {% if draft.progress < 30 %}#dc2626{% elif draft.progress < 70 %}#f59e0b{% else %}#059669{% endif %}; height: 100%; width: {{ draft.progress }}%; transition: width 0.3s ease;"></div>
+          </div>
+          
+          <!-- Section Breakdown (Compact) -->
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.projects.complete %}<span style="color: #059669;">✓</span>{% elif draft.sections.projects.status == 'in-progress' %}<span style="color: #f59e0b;">◐</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">Projects</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.pct.complete %}<span style="color: #059669;">✓</span>{% elif draft.sections.pct.status == 'in-progress' %}<span style="color: #f59e0b;">◐</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">PCT</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.slp.complete %}<span style="color: #059669;">✓</span>{% elif draft.sections.slp.status == 'in-progress' %}<span style="color: #f59e0b;">◐</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">SLP</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.reading.complete %}<span style="color: #059669;">✓</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">Reading</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.rma.complete %}<span style="color: #059669;">✓</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">RMA</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+              {% if draft.sections.supervision.complete %}<span style="color: #059669;">✓</span>{% else %}<span style="color: #9ca3af;">○</span>{% endif %}
+              <span style="color: #6b7280;">Supervision</span>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if card.available_forms %}
+    <div class="integrated-section-card__section">
+      <h4 style="font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.025em;">Available to Start</h4>
+      <ul style="list-style: none; padding: 0; margin: 0;">
+        {% for form in card.available_forms %}
+          <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+            <div>
+              <div style="font-size: 0.875rem; font-weight: 500; color: #111827;">{{ form.form_template.title }}</div>
+              {% if form.deadline %}
+                <div style="font-size: 0.75rem; color: {% if form.deadline <= today %}#dc2626{% else %}#6b7280{% endif %};">
+                  Due {{ form.deadline|date:"M j, Y" }}
+                </div>
+              {% endif %}
+            </div>
+            <a class="btn btn--ghost btn--sm" href="{% url 'open_forms_list' card.section.code %}" style="white-space: nowrap;">
+              View
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</div>
+
+<style>
+.integrated-section-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.integrated-section-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+
+.integrated-section-card__title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.integrated-section-card__section {
+  margin-top: 1rem;
+}
+
+.integrated-section-card__section:first-child {
+  margin-top: 0;
+}
+</style>

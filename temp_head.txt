@@ -1,0 +1,180 @@
+/**
+ * SGOD MIS Form Design System
+ * Boring, Clean, Professional - No Fancy Stuff
+ * 
+ * Philosophy: Government form aesthetic
+ * - Simple gray borders
+ * - White backgrounds
+ * - Minimal colors
+ * - Fast and accessible
+ */
+
+/* ============================================
+   CSS VARIABLES (Design Tokens)
+   ============================================ */
+
+:root {
+  /* Colors - Minimal Palette */
+  --color-primary: #2563eb;
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-warning: #f59e0b;
+  
+  --color-text: #111827;
+  --color-text-light: #6b7280;
+  --color-text-muted: #9ca3af;
+  
+  --color-border: #d1d5db;
+  --color-border-light: #e5e7eb;
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f9fafb;
+  --color-bg-gray: #f3f4f6;
+  
+  /* Typography */
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Courier New', Consolas, monospace;
+  
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-base: 1rem;     /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  
+  /* Spacing */
+  --space-1: 0.25rem;    /* 4px */
+  --space-2: 0.5rem;     /* 8px */
+  --space-3: 0.75rem;    /* 12px */
+  --space-4: 1rem;       /* 16px */
+  --space-5: 1.25rem;    /* 20px */
+  --space-6: 1.5rem;     /* 24px */
+  --space-8: 2rem;       /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  
+  /* Borders & Shadows */
+  --border-radius: 0.375rem;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   COMPONENT 1: TAB NAVIGATION
+   ============================================ */
+
+.submission-tabs {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-list {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tab-list a {
+  display: inline-block;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.tab-list a:hover {
+  background: var(--color-bg-subtle);
+  border-color: var(--color-primary);
+}
+
+.tab-list a.active {
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+.tab-progress {
+  margin-top: var(--space-3);
+  height: 4px;
+  background: var(--color-bg-gray);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-indicator {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.3s ease;
+}
+
+/* ============================================
+   COMPONENT 2: SECTION CARD
+   ============================================ */
+
+.section-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-card__header {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-4) 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border-light);
+}
+
+.section-card__intro {
+  background: var(--color-bg-subtle);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--border-radius);
+  border-left: 3px solid var(--color-border);
+  margin-bottom: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-light);
+  line-height: 1.6;
+}
+
+.section-card__intro p {
+  margin: 0;
+}
+
+/* ============================================
+   COMPONENT 3: DATA TABLE
+   ============================================ */
+
+.data-table-wrapper {
+  overflow-x: auto;
+  margin: var(--space-4) 0;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  background: var(--color-bg);
+}
+
+.data-table thead th {
+  background: var(--color-bg-subtle);
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  text-transform: uppercase;

@@ -1,0 +1,119 @@
+﻿{% load static %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Who Didn&#39;t Submit</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 1100px; }
+      h1 { margin-bottom: 1rem; }
+      form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+      label { display: flex; flex-direction: column; font-size: .9rem; color: #334155; gap: .35rem; }
+      select { padding: .5rem; border-radius: .5rem; border:1px solid #cbd5f5; }
+      button { padding:.55rem 1.25rem; border-radius:.5rem; border:1px solid #0b57d0; background:#0b57d0; color:#fff; cursor:pointer; }
+      table { width:100%; border-collapse: collapse; margin-top: 1rem; }
+      th, td { border:1px solid #e2e8f0; padding:.6rem; text-align:left; vertical-align:top; }
+      th { background:#f1f5f9; font-weight:600; }
+      ul { margin:0; padding-left:1.2rem; }
+      .muted { color:#64748b; font-size:.9rem; }
+      .chip-row { display:flex; flex-wrap:wrap; gap:.35rem; margin:.3rem 0; }
+      .profile-chip { display:inline-block; padding:.2rem .45rem; border-radius:1rem; background:#e2e8f0; color:#0f172a; font-size:.75rem; }
+      .profile-chip--warning { background:#fee2e2; color:#b91c1c; }
+      .profile-chip--muted { background:#e2e8f0; color:#475569; }
+      .school-meta { font-size:.85rem; color:#475569; margin:.2rem 0 0; }
+      .school-meta { margin:.25rem 0 0; font-size:.85rem; color:#475569; }
+      .totals { margin-top:1rem; font-weight:600; }
+    </style>
+  </head>
+  <body class="container dashboards-page">
+    {% include "includes/auth_nav.html" %}
+    <h1>Who Didn&#39;t Submit</h1>
+
+    <form method="get" class="filters">
+      <label>Section
+        <select name="section" onchange="this.form.submit()">
+          {% for section in sections %}
+            <option value="{{ section.code }}"{% if selected_section and selected_section.code == section.code %} selected{% endif %}>{{ section.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Form
+        <select name="form_code" onchange="this.form.submit()">
+          {% for form in form_templates %}
+            <option value="{{ form.code }}"{% if selected_form and selected_form.code == form.code %} selected{% endif %}>{{ form.title }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Period
+        <select name="period_id" onchange="this.form.submit()">
+          {% for period in periods %}
+            <option value="{{ period.id }}"{% if selected_period and selected_period.id == period.id %} selected{% endif %}>{{ period.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>District
+        <select name="district_id" onchange="this.form.submit()">
+          <option value="">All districts</option>
+          {% for district in districts %}
+            <option value="{{ district.id }}"{% if selected_district_id == district.id %} selected{% endif %}>{{ district.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div style="display:flex; align-items:flex-end;">
+        <button type="submit" class="btn btn--primary">Apply</button>
+      </div>
+    </form>
+
+    {% if district_rows %}
+      <p class="totals">Submitted {{ total_submitted }} of {{ total_schools }} schools &middot; Missing {{ total_missing }}</p>
+      <div class="table-scroll">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>District</th>
+            <th>Total Schools</th>
+            <th>Submitted</th>
+            <th>Missing</th>
+            <th>Schools that still need to submit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in district_rows %}
+            <tr>
+              <td>{{ row.district.name|default:"Unassigned" }}</td>
+              <td>{{ row.total_schools }}</td>
+              <td>{{ row.submitted_count }}</td>
+              <td>{{ row.missing_count }}</td>
+              <td>
+                {% if row.missing_schools %}
+                  <ul>
+                    {% for entry in row.missing_schools %}
+                      <li>
+                        <strong>{{ entry.school.name }}</strong>
+                        <div class="chip-row">
+                          {% if entry.missing_profile %}<span class="profile-chip profile-chip--warning">Profile missing</span>{% endif %}
+                          {% if entry.missing_head_name %}<span class="profile-chip profile-chip--warning">Head missing</span>{% endif %}
+                          {% if entry.missing_head_contact %}<span class="profile-chip profile-chip--muted">Contact missing</span>{% endif %}
+                          {% if entry.grade_span_warning %}<span class="profile-chip profile-chip--warning">Check grade span</span>{% endif %}
+                        </div>
+                        {% if entry.head_name %}<div class="school-meta">Head: {{ entry.head_name }}</div>{% else %}<div class="school-meta muted">Head not set</div>{% endif %}
+                        {% if entry.head_contact %}<div class="school-meta">Contact: {{ entry.head_contact }}</div>{% endif %}
+                        {% if entry.strands %}<div class="school-meta">Strands: {{ entry.strands }}</div>{% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <span class="muted">All schools have submitted.</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="muted">No schools matched the current filters.</p>
+    {% endif %}
+  </body>
+</html>
