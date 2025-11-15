@@ -1,0 +1,1258 @@
+{% load submission_tags %}
+{% load static %}
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{{ submission.form_template.title }} - {{ submission.school.name }}</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/form-system.css' %}">
+    <!-- Boring Design System: Simple, Clean, Professional -->
+  </head>
+  <body class="container submission-page">
+    {% include "includes/auth_nav.html" %}
+    
+    <div class="submission-shell">
+      <!-- Messages -->
+      {% if messages %}
+        <ul class="message-list">
+          {% for message in messages %}
+            <li class="message message--{{ message.tags|default:'info' }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <!-- Submission Status Card -->
+      <div class="submission-status-card">
+        <div class="submission-status">
+          <strong>{{ submission.form_template.title }}</strong>
+          <span class="submission-status__meta">{{ submission.school.name }}</span>
+          <span class="submission-status__meta">School Year {{ submission.school_year.label }}</span>
+          <span class="submission-status__meta">
+            Status:
+            <span class="status-pill status-pill--{{ submission.status }}">
+              {{ submission.get_status_display }}
+            </span>
+          </span>
+          <span class="submission-status__meta">Submitted: {{ submission.submitted_at|date:"M d, Y" }}</span>
+        </div>
+      </div>
+
+      {% if not can_edit %}
+      <div class="message message--info read-only-banner">
+        This submission has been {{ submission.get_status_display|lower }} and is now read-only. You can review all entries but further edits are disabled.
+      </div>
+      {% endif %}
+
+      <!-- Tab Navigation -->
+      <div class="submission-tabs">
+        <div class="tab-list tabs">
+          {% for tab in tabs %}
+            <a href="?tab={{ tab.key }}" class="{% if current_tab == tab.key %}active{% endif %}">{{ tab.label }}</a>
+          {% endfor %}
+        </div>
+        
+        <!-- Tab Progress Bar -->
+        <div class="tab-progress">
+          <div class="progress-indicator" style="width: {{ progress_width }}%;"></div>
+        </div>
+      </div>
+
+      <!-- Main Form -->
+      <form method="post" id="submission-form" 
+            data-current-tab="{{ current_tab }}" 
+            data-expected-timings='{{ expected_timings_json|safe }}'
+            data-can-edit="{% if can_edit %}1{% else %}0{% endif %}"
+            data-tab-order='{{ tabs_json|safe }}'>
+        {% csrf_token %}
+        <input type="hidden" name="tab" id="id_tab" value="{{ current_tab }}">
+        <input type="hidden" name="next_tab" id="id_next_tab">
+        <input type="hidden" name="autosave" id="id_autosave" value="0">
+        <input type="hidden" name="skip_validation" id="id_skip_validation" value="0">
+        <input type="hidden" name="reading_period" id="id_reading_period" value="{{ selected_reading_period }}">
+        <input type="hidden" name="current_subject_id" id="id_current_subject_id">
+        <input type="hidden" name="current_subject_prefix" id="id_current_subject_prefix">
+        <input type="hidden" name="current_subject_index" id="id_current_subject_index">
+
+        <!-- Content sections will be here -->
+        {% if current_tab == 'projects' %}
+          <div class="card">
+            <h3 style="margin-bottom: 1rem;">I. PROJECTS AND ACTIVITIES</h3>
+            
+            {{ projects_formset.management_form }}
+            
+            {% for project_form in projects_formset %}
+              <div class="project-section" data-project-index="{{ forloop.counter0 }}" style="margin-bottom: 2rem;">
+                
+                {# Project Header Card #}
+                <div class="project-header">
+                  {{ project_form.id }}
+                  <div class="project-header-grid">
+                    <div class="form-field">
+                      <label class="form-label">Project:</label>
+                      {{ project_form.project_title }}
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label">Area of Concern:</label>
+                      {{ project_form.area_of_concern }}
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label">Conference Date:</label>
+                      {{ project_form.conference_date }}
+                    </div>
+                  </div>
+                  {% if can_edit %}
+                    <div style="display:none">{{ project_form.DELETE }}</div>
+                    <button type="button" class="btn btn--danger project-delete-btn header-action">Delete Project</button>
+                  {% endif %}
+                </div>
+                
+                {# Activities Table for this project - Inline Editing #}
+                {% if project_form.instance.pk %}
+                  {# Find the matching activity formset for this project #}
+                  {% for formset_data in activity_formsets %}
+                    {% if formset_data.project_index == forloop.parentloop.counter0 %}
+                      {{ formset_data.formset.management_form }}
+                      
+                      <div class="projects-table-container">
+                        
+                        <table class="projects-table">
+                              <thead>
+                                <tr>
+                                  <th class="col-activity">Activities</th>
+                                  <th class="col-output">Output<br><small class="text-muted">Target</small></th>
+                                  <th class="col-output">Output<br><small class="text-muted">Actual</small></th>
+                                  <th class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></th>
+                                  <th class="col-timeframe">Timeframe<br><small class="text-muted">Actual</small></th>
+                                  <th class="col-budget">Budget<br><small class="text-muted">Target</small></th>
+                                  <th class="col-budget">Budget<br><small class="text-muted">Actual</small></th>
+                                  <th class="col-action">Action</th>
+                                </tr>
+                              </thead>
+                          <tbody class="activity-table-body" data-project-id="{{ project_form.instance.pk }}">
+                            {% for activity_form in formset_data.formset %}
+                              {{ activity_form.id }}
+                              {% if not forloop.first %}
+                              <tr class="activity-subheader">
+                                <td class="col-activity">Activities</td>
+                                <td class="col-output">Output<br><small class="text-muted">Target</small></td>
+                                <td class="col-output">Output<br><small class="text-muted">Actual</small></td>
+                                <td class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></td>
+                                <td class="col-timeframe">Timeframe<br><small class="text-muted">Actual</small></td>
+                                <td class="col-budget">Budget<br><small class="text-muted">Target</small></td>
+                                <td class="col-budget">Budget<br><small class="text-muted">Actual</small></td>
+                                <td class="col-action">Action</td>
+                              </tr>
+                              {% endif %}
+                              <tr class="activity-row" data-activity-index="{{ forloop.counter0 }}">
+                                <td>
+                                  <div class="text-cell" data-field="activity">
+                                    {% if activity_form.activity.value and activity_form.activity.value|length > 50 %}
+                                      <span class="text-truncated" title="{{ activity_form.activity.value }}">
+                                        {{ activity_form.activity.value|truncatechars:50 }}
+                                      </span>
+                                      <div class="text-full">
+                                        {{ activity_form.activity }}
+                                      </div>
+                                    {% else %}
+                                      {{ activity_form.activity }}
+                                    {% endif %}
+                                  </div>
+                                </td>
+                                <td>{{ activity_form.output_target }}</td>
+                                <td>{{ activity_form.output_actual }}</td>
+                                <td>
+                                  {% with activity_form.timeframe_target as field %}
+                                    <input type="date" 
+                                           name="{{ field.name }}" 
+                                           id="{{ field.id_for_label }}"
+                                           value="{{ field.value|default:'' }}"
+                                           class="table-input table-date"
+                                           {% if field.field.required %}required{% endif %}>
+                                  {% endwith %}
+                                </td>
+                                <td>
+                                  {% with activity_form.timeframe_actual as field %}
+                                    <input type="date" 
+                                           name="{{ field.name }}" 
+                                           id="{{ field.id_for_label }}"
+                                           value="{{ field.value|default:'' }}"
+                                           class="table-input table-date">
+                                  {% endwith %}
+                                </td>
+                                <td>{{ activity_form.budget_target }}</td>
+                                <td>{{ activity_form.budget_actual }}</td>
+                                
+                                <td>
+                                  {% if can_edit %}
+                                    <div style="display:none">{{ activity_form.DELETE }}</div>
+                                    <button type="button"
+                                            class="btn btn--danger btn--small activity-delete-btn"
+                                            aria-label="Remove this activity">
+                                      Delete
+                                    </button>
+                                  {% endif %}
+                                </td>
+                              </tr>
+                              <tr class="activity-details" data-project-id="{{ project_form.instance.pk }}" data-activity-index="{{ forloop.counter0 }}">
+                                <td colspan="8">
+                                  <div class="activity-number"><span class="section-number">{{ forloop.counter }}</span><span class="label">Activity</span></div>
+                                  <div class="activity-details-grid">
+                                    <div class="details-field">
+                                      <label class="form-label">Interpretation</label>
+                                      {{ activity_form.interpretation }}
+                                    </div>
+                                    <div class="details-field">
+                                      <label class="form-label">Issues / Problems</label>
+                                      {{ activity_form.issues_unaddressed }}
+                                    </div>
+                                    <div class="details-field">
+                                      <label class="form-label">Facilitating Factors</label>
+                                      {{ activity_form.facilitating_factors }}
+                                    </div>
+                                    <div class="details-field">
+                                      <label class="form-label">Agreements</label>
+                                      {{ activity_form.agreements }}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {% if can_edit %}
+                      <button type="button" class="btn btn--secondary" 
+                              style="margin-top: 0.75rem; font-size: 0.875rem; padding: 0.5rem 1rem;"
+                              onclick="addActivityRow({{ project_form.instance.pk }})">
+                        + Add Activity
+                      </button>
+                      {% endif %}
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <p style="color: #6b7280; font-style: italic; margin: 1rem 0;">
+                    Save this project first to add activities.
+                  </p>
+                {% endif %}
+                
+              </div>
+            {% endfor %}
+            
+            {# Add Project Button #}
+            {% if can_edit %}
+            <div style="margin-top: 2rem; padding: 1.5rem; border: 2px dashed #d1d5db; border-radius: 0.5rem; text-align: center; background: #f9fafb;">
+              <button type="button" class="btn btn--primary" onclick="addProjectRow()" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+                + Add Project
+              </button>
+              <p style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">Add a new project with activities</p>
+            </div>
+            {% endif %}
+          </div>
+          
+          {# Navigation Buttons #}
+          <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+            <span></span> {# First tab, no previous #}
+            <div style="display: flex; gap: 0.75rem;">
+              {% if can_edit %}
+              <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+              {% endif %}
+              <button type="button" class="btn btn--primary tab-nav" data-nav-target="pct">Next</button>
+            </div>
+          </div>
+        {% endif %}
+      
+      {% if current_tab == 'slp' %}
+        {% load submission_tags %}
+        {{ slp_formset.management_form }}
+
+        <div class="section-card">
+          <div class="section-card__header">School Level of Proficiency (SLOP) Analysis</div>
+          <div class="section-card__intro">
+            <p>Complete proficiency data, LLC, intervention plans, and comprehensive analysis for each subject. Expand grade levels to view and edit subjects. <strong>Save each subject after completing it.</strong></p>
+          </div>
+
+          <div class="slp-nested-accordion">
+            {% for grade_data in slp_formset|group_slp_by_grade %}
+              <!-- Grade Level Accordion -->
+              <div class="grade-accordion" data-grade="{{ grade_data.grade_label }}">
+                <div class="grade-header" onclick="toggleGrade('{{ grade_data.grade_label|slugify }}')">
+                  <div class="grade-title">
+                    <span class="accordion-icon">&#9656;</span>
+                    <h4>{{ grade_data.grade_label }}</h4>
+                  </div>
+                  <div class="grade-stats">
+                    <span class="subjects-count">{{ grade_data.completed_subjects }}/{{ grade_data.total_subjects }} subjects</span>
+                    <div class="completion-bar-container">
+                      <div class="completion-fill" style="width: {{ grade_data.completion_percentage }}%;"></div>
+                    </div>
+                    <span class="completion-percentage">{{ grade_data.completion_percentage }}%</span>
+                  </div>
+                </div>
+
+                <!-- Subjects Container (hidden by default) -->
+                <div class="subjects-container" id="grade-{{ grade_data.grade_label|slugify }}" style="display: none;">
+                  {% for form in grade_data.subjects %}
+                    {{ form.id }}
+                    {{ form.grade_label }}
+                    {{ form.subject }}
+                    
+                    {% with status=form.instance|get_subject_status %}
+                    <!-- Subject Accordion -->
+                    <div class="subject-accordion" data-subject="{{ form.instance.get_subject_display }}">
+                      <div class="subject-header" onclick="toggleSubject('{{ grade_data.grade_label|slugify }}-{{ form.prefix|slice:'9:' }}')">
+                        <div class="subject-title">
+                          <span class="accordion-icon">&#9656;</span>
+                          <span class="subject-name">{{ form.instance.get_subject_display }}</span>
+                          {% if status == 'complete' %}
+                            <span class="status-badge complete">Completed</span>
+                          {% elif status == 'incomplete' %}
+                            <span class="status-badge incomplete">In Progress</span>
+                          {% elif status == 'not-started' %}
+                            <span class="status-badge not-started">Not Started</span>
+                          {% endif %}
+                        </div>
+                      </div>
+
+                      <!-- Subject Content (hidden by default) -->
+                        {% with subject_index=form.prefix|slice:'9:' %}
+                      <div class="subject-content" id="subject-{{ grade_data.grade_label|slugify }}-{{ subject_index }}" style="display: none;">
+                        
+                        <!-- Section 1: Proficiency Data -->
+                        <!-- Section Headers with Subject Context -->
+                        <div class="subject-context-header">
+                          <h5 class="subject-label">{{ form.instance.grade_label }} - {{ form.instance.subject|title }}</h5>
+                        </div>
+
+                        <!-- Section 1: Proficiency Data Entry -->
+                        <div class="card-section proficiency-section" data-section="proficiency" data-form-index="{{ subject_index }}">
+                          <h5 class="section-title">
+                            <span class="section-number">1</span>
+                            Proficiency Data Entry
+                          </h5>
+                          
+                          <!-- Validation Errors Container -->
+                          <div class="validation-errors" style="display: none;">
+                            <div class="error-icon">!</div>
+                            <div class="error-messages"></div>
+                          </div>
+                          
+                          <div class="offered-checkbox">
+                            <label>
+                              {{ form.is_offered }}
+                              <span>Subject is offered at this grade level</span>
+                            </label>
+                          </div>
+
+                          <!-- Not Offered Message (hidden by default) -->
+                          <div class="not-offered-message" style="display: none;">
+                            <div class="not-offered-icon">
+                              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                              </svg>
+                            </div>
+                            <div class="not-offered-text">
+                              <strong>This subject is not offered for {{ form.instance.grade_label }}</strong>
+                              <p>Check the box above if this subject is actually offered.</p>
+                            </div>
+                          </div>
+
+                          <div class="proficiency-grid">
+                            <div class="proficiency-field">
+                              <label>Enrolment</label>
+                              {{ form.enrolment }}
+                            </div>
+                            <div class="proficiency-field">
+                              <label>Did Not Meet</label>
+                              {{ form.dnme }}
+                            </div>
+                            <div class="proficiency-field">
+                              <label>Fairly Satisfactory</label>
+                              {{ form.fs }}
+                            </div>
+                            <div class="proficiency-field">
+                              <label>Satisfactory</label>
+                              {{ form.s }}
+                            </div>
+                            <div class="proficiency-field">
+                              <label>Very Satisfactory</label>
+                              {{ form.vs }}
+                            </div>
+                            <div class="proficiency-field">
+                              <label>Outstanding</label>
+                              {{ form.o }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Section 2: Top 3 LLC -->
+                        <div class="card-section llc-section" data-section="llc" data-form-index="{{ subject_index }}">
+                          <h5 class="section-title">
+                            <span class="section-number">2</span>
+                            {{ form.instance.subject|title }} - Top 3 Least Learned Competencies
+                          </h5>
+                          
+                          <!-- Validation Errors Container -->
+                          <div class="validation-errors" style="display: none;">
+                            <div class="error-icon">Ã¢Å¡Â </div>
+                            <div class="error-messages"></div>
+                          </div>
+                          
+                          <label class="field-label">
+                            <strong>Top 3 LLC for {{ form.instance.subject|title }}</strong>
+                            <small>List the 3 least learned competencies (one per line)</small>
+                          </label>
+                          {{ form.top_three_llc }}
+                        </div>
+
+                        <!-- Section 3: Intervention Plan -->
+                        <div class="card-section intervention-section" data-section="intervention" data-form-index="{{ subject_index }}">
+                          <h5 class="section-title">
+                            <span class="section-number">3</span>
+                            {{ form.instance.subject|title }} - Intervention Plan
+                          </h5>
+                          
+                          <!-- Validation Errors Container -->
+                          <div class="validation-errors" style="display: none;">
+                            <div class="error-icon">Ã¢Å¡Â </div>
+                            <div class="error-messages"></div>
+                          </div>
+                          
+                          <label class="field-label">
+                            <strong>Planned Interventions for {{ form.instance.subject|title }}</strong>
+                            <small>Describe interventions for each LLC (match the order above)</small>
+                          </label>
+                          {{ form.intervention_plan }}
+                        </div>
+
+                                                <!-- Section 4: Intervention Strategy -->
+                        <div class="card-section strategy-section" data-section="strategy" data-form-index="{{ subject_index }}">
+                          <h5 class="section-title">
+                            <span class="section-number">4</span>
+                            {{ form.instance.subject|title }} - DNME Focus Strategy
+                          </h5>
+                          <label class="field-label">
+                            <strong>At your level, what particular strategy or intervention can you implement to address learners under DNME?</strong>
+                            <small>Use the DNME rankings to prioritise your actions. Include concrete timelines, stakeholders, and required resources.</small>
+                          </label>
+                          <textarea 
+                            name="slp_analysis_{{ subject_index }}_overall_strategy"
+                            rows="5"
+                            class="strategy-textarea"
+                            placeholder="Describe the targeted interventions you will implement for DNME learners..."
+                          >{{ form.instance.analysis.overall_strategy|default:"" }}</textarea>
+                        </div>
+                        <!-- End Strategy Section -->
+                        
+                        <!-- Save Button for this Subject -->
+                        {% if can_edit %}
+                        <div class="subject-save-actions">
+                          <button type="submit" class="btn btn-success save-subject-btn" name="action" value="save_subject" data-subject-id="{{ form.instance.pk }}" data-subject-prefix="{{ form.prefix }}" data-subject-index="{{ subject_index }}">
+                            Save This Subject
+                          </button>
+                          <span class="save-hint">Save your progress for {{ form.instance.grade_label }} - {{ form.instance.subject }}</span>
+                        </div>
+                        {% endif %}
+                        
+                      </div>
+                      <!-- End Subject Content -->
+                    </div>
+                    <!-- End Subject Accordion -->
+                    {% endwith %}
+                    {% endwith %}
+                  {% endfor %}
+                </div>
+                <!-- End Subjects Container -->
+              </div>
+              <!-- End Grade Accordion -->
+            {% endfor %}
+          </div>
+          
+                {% if slp_dnme_summary or slp_outstanding_summary %}
+        <div class="section-card slp-summary-card">
+          <div class="section-card__header">Performance Snapshot</div>
+          <div class="section-card__intro">
+            <p>Automatically generated from SLP learner counts. Update the tables above to refresh these rankings.</p>
+          </div>
+          <div class="slp-summary-grid">
+            {% if slp_dnme_summary %}
+            <section class="slp-summary-column">
+              <h5>Top 5 Grade Levels with the Highest DNME</h5>
+              {% for subject, entries in slp_dnme_summary.items %}
+              <section class="slp-summary-subject">
+                <h6>{{ subject }}</h6>
+                <ul class="slp-summary-list">
+                  {% for item in entries %}
+                  <li class="slp-summary-item">
+                    <span class="slp-summary-grade">{{ item.grade }}</span>
+                    <span class="slp-summary-count"><strong>{{ item.count }}</strong><span class="slp-summary-pct">{{ item.pct }}%</span></span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </section>
+              {% endfor %}
+            </section>
+            {% endif %}
+            {% if slp_outstanding_summary %}
+            <section class="slp-summary-column">
+              <h5>Top 5 Grade Levels with the Highest Outstanding</h5>
+              {% for subject, entries in slp_outstanding_summary.items %}
+              <section class="slp-summary-subject">
+                <h6>{{ subject }}</h6>
+                <ul class="slp-summary-list">
+                  {% for item in entries %}
+                  <li class="slp-summary-item">
+                    <span class="slp-summary-grade">{{ item.grade }}</span>
+                    <span class="slp-summary-count"><strong>{{ item.count }}</strong><span class="slp-summary-pct">{{ item.pct }}%</span></span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </section>
+              {% endfor %}
+            </section>
+            {% endif %}
+          </div>
+          {% if slp_dnme_recommendations %}
+          <div class="slp-summary-actions">
+            <h6>Suggested DNME Action Focus</h6>
+            <ul class="slp-action-list">
+              {% for item in slp_dnme_recommendations %}
+              <li class="slp-action-item">
+                <strong>{{ item.subject }}:</strong>
+                Prioritise targeted remediation for {{ item.grade }} ({{ item.pct }}% DNME, {{ item.count }} learners).
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+{# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="pct">Previous</button>
+          <div style="display: flex; gap: 0.75rem;">
+            {% if can_edit %}
+            <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+            {% endif %}
+            <button type="button" class="btn btn--primary tab-nav" data-nav-target="reading">Next</button>
+          </div>
+        </div>
+        {% endif %}
+      
+      {% if current_tab == 'pct' %}
+        <div class="section-card">
+          <div class="section-card__header">Percent Implementation</div>
+          <div class="section-card__intro">
+            <p>Encode the latest completion per area (0-100%) and note follow-up actions.</p>
+          </div>
+          
+          {{ pct_formset.management_form }}
+          
+          {% for form in pct_formset %}
+            {{ form.id }}
+            {{ form.area }}
+            <div class="pct-area-row">
+              <div class="pct-area-header">
+                <strong>{{ form.instance.get_area_display }}</strong>
+                {% if form.non_field_errors %}
+                  <span class="form-error">{{ form.non_field_errors }}</span>
+                {% endif %}
+              </div>
+              <div class="pct-area-content">
+                <div class="form-field pct-num-field">
+                  <label class="form-label">Implementation %</label>
+                  <div class="pct-input">
+                    {{ form.percent }}
+                    <span class="pct-suffix">%</span>
+                  </div>
+                  <small class="pct-hint">0–100%</small>
+                </div>
+                <div class="form-field pct-notes-field">
+                  <label class="form-label">Key Action Points</label>
+                  {{ form.action_points }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        
+        {# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="projects">Previous</button>
+          <div style="display: flex; gap: 0.75rem;">
+            {% if can_edit %}
+            <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+            {% endif %}
+            <button type="button" class="btn btn--primary tab-nav" data-nav-target="slp">Next</button>
+          </div>
+        </div>
+      {% endif %}
+      
+      {% if current_tab == 'reading' %}
+        <div class="reading-intro">
+          <p>Document reading assessment results and interventions for the school year.</p>
+        </div>
+
+        <!-- Assessment Period Selector -->
+        <div class="period-selector">
+          <label class="period-label">Assessment Period:</label>
+          <div class="period-options">
+            <a href="?tab=reading&reading_period=bosy" class="period-btn {% if selected_reading_period == 'bosy' %}active{% endif %}">
+              BOSY <span class="period-subtitle">(Q3 Report)</span>
+            </a>
+            <a href="?tab=reading&reading_period=mosy" class="period-btn {% if selected_reading_period == 'mosy' %}active{% endif %}">
+              MOSY <span class="period-subtitle">(Q4 Report)</span>
+            </a>
+            <a href="?tab=reading&reading_period=eosy" class="period-btn {% if selected_reading_period == 'eosy' %}active{% endif %}">
+              EOSY <span class="period-subtitle">(Q1 Report)</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Assessment Availability Messages -->
+        {% if not crla_grades and not philiri_elementary_grades and not philiri_junior_grades and not philiri_senior_grades %}
+        <div class="assessment-section">
+          <div style="text-align: center; padding: 3rem 2rem; background: #f9fafb; border: 2px dashed #d1d5db; border-radius: 0.5rem;">
+
+            <h3 style="color: #374151; margin-bottom: 0.5rem;">No Reading Assessments Required</h3>
+            <p style="color: #6b7280; margin-bottom: 0;">Your school's grade span ({{ school_grades|join:", "|default:"not configured" }}) does not include grades that require CRLA or PHILIRI assessments.</p>
+            <p style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">
+              <strong>CRLA:</strong> Required for grades 1-3 &middot; <strong>PHILIRI:</strong> Required for grades 4-10 (Elementary &amp; Junior High only)
+            </p>
+          </div>
+        </div>
+        {% else %}
+          {% if not crla_grades %}
+          <div class="assessment-section">
+            <div style="padding: 1.5rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+              <h3 style="color: #92400e; margin-bottom: 0.5rem;">CRLA Assessment Not Required</h3>
+              <p style="color: #92400e; margin-bottom: 0;">Your school does not offer grades 1-3, so CRLA (Comprehensive Rapid Literacy Assessment) is not required.</p>
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if not philiri_elementary_grades and not philiri_junior_grades and not philiri_senior_grades %}
+          <div class="assessment-section">
+            <div style="padding: 1.5rem; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+              <h3 style="color: #92400e; margin-bottom: 0.5rem;">PHILIRI Assessment Not Required</h3>
+              <p style="color: #92400e; margin-bottom: 0;">Your school does not offer grades 4-10, so PHILIRI (Philippine Informal Reading Inventory) is not required.</p>
+            </div>
+          </div>
+          {% endif %}
+        {% endif %}
+
+        <!-- CRLA RESULTS - Only show if school offers grades 1-3 -->
+        {% if crla_grades %}
+        <div class="assessment-section">
+          <h2 class="assessment-title">CRLA RESULTS</h2>
+          
+          {{ reading_crla_new_formset.management_form }}
+          
+          {% for form in reading_crla_new_formset %}
+            {{ form.id }}
+            {{ form.period }}
+            {{ form.level }}
+            
+            <div class="assessment-level-card">
+              {% if form.errors %}
+              <div class="message message--error" style="margin-bottom: .75rem;">
+                CRLA: Please correct the fields highlighted below.
+                {% for field, errs in form.errors.items %}
+                  {% for err in errs %}<div>- {{ field|capfirst }}: {{ err }}</div>{% endfor %}
+                {% endfor %}
+              </div>
+              {% endif %}
+              <h3 class="level-title">{{ form.instance.get_level_display }} Results</h3>
+              
+              <div class="assessment-matrix">
+                <table class="reading-matrix-table">
+                  <thead>
+                    <tr>
+                      <th class="subject-col">Subject / Grade</th>
+                      {% if 1 in crla_grades %}<th>Grade I</th>{% endif %}
+                      {% if 2 in crla_grades %}<th>Grade II</th>{% endif %}
+                      {% if 3 in crla_grades %}<th>Grade III</th>{% endif %}
+                      <th class="total-col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="subject-label">Mother Tongue</td>
+                      {% if 1 in crla_grades %}<td>{{ form.mt_grade_1 }}</td>{% endif %}
+                      {% if 2 in crla_grades %}<td>{{ form.mt_grade_2 }}</td>{% endif %}
+                      {% if 3 in crla_grades %}<td>{{ form.mt_grade_3 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="mt">0</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="subject-label">Filipino</td>
+                      {% if 1 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
+                      {% if 2 in crla_grades %}<td>{{ form.fil_grade_2 }}</td>{% endif %}
+                      {% if 3 in crla_grades %}<td>{{ form.fil_grade_3 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="fil">0</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="subject-label">English</td>
+                      {% if 1 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
+                      {% if 2 in crla_grades %}<td class="na-cell">Ã¢â‚¬â€</td>{% endif %}
+                      {% if 3 in crla_grades %}<td>{{ form.eng_grade_3 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="eng">0</span>
+                      </td>
+                    </tr>
+                    <tr class="total-row">
+                      <td colspan="{% if crla_grades %}{{ crla_grades|length|add:1 }}{% else %}4{% endif %}" class="total-label">TOTAL LEARNERS:</td>
+                      <td class="grand-total">
+                        <strong><span data-grand-total>0</span> learners</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- PHILIRI RESULTS - Only show if school offers grades 4-10 -->
+        {% if philiri_elementary_grades or philiri_junior_grades or philiri_senior_grades %}
+        <div class="assessment-section">
+          <h2 class="assessment-title">PHILIRI RESULTS</h2>
+          
+          {{ reading_philiri_new_formset.management_form }}
+          
+          {% for form in reading_philiri_new_formset %}
+            {{ form.id }}
+            {{ form.period }}
+            {{ form.level }}
+            
+            <!-- Elementary PHILIRI (Grades 4-6) - Only show if school offers these grades -->
+            {% if philiri_elementary_grades %}
+            <div class="assessment-level-card">
+              {% if form.errors %}
+              <div class="message message--error" style="margin-bottom: .75rem;">
+                PHILIRI: Please correct the fields highlighted below.
+                {% for field, errs in form.errors.items %}
+                  {% for err in errs %}<div>- {{ field|capfirst }}: {{ err }}</div>{% endfor %}
+                {% endfor %}
+              </div>
+              {% endif %}
+              <h3 class="level-title">{{ form.instance.get_level_display }} Level Results - Elementary (Grades 4-6)</h3>
+              
+              <div class="assessment-matrix">
+                <table class="reading-matrix-table">
+                  <thead>
+                    <tr>
+                      <th class="subject-col">Subject / Grade</th>
+                      {% if 4 in philiri_elementary_grades %}<th>Grade 4</th>{% endif %}
+                      {% if 5 in philiri_elementary_grades %}<th>Grade 5</th>{% endif %}
+                      {% if 6 in philiri_elementary_grades %}<th>Grade 6</th>{% endif %}
+                      <th class="total-col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="subject-label">English</td>
+                      {% if 4 in philiri_elementary_grades %}<td>{{ form.eng_grade_4 }}</td>{% endif %}
+                      {% if 5 in philiri_elementary_grades %}<td>{{ form.eng_grade_5 }}</td>{% endif %}
+                      {% if 6 in philiri_elementary_grades %}<td>{{ form.eng_grade_6 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="eng-elem">0</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="subject-label">Filipino</td>
+                      {% if 4 in philiri_elementary_grades %}<td>{{ form.fil_grade_4 }}</td>{% endif %}
+                      {% if 5 in philiri_elementary_grades %}<td>{{ form.fil_grade_5 }}</td>{% endif %}
+                      {% if 6 in philiri_elementary_grades %}<td>{{ form.fil_grade_6 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="fil-elem">0</span>
+                      </td>
+                    </tr>
+                    <tr class="total-row">
+                      {% if 4 in philiri_elementary_grades %}<td></td>{% endif %}
+                      {% if 5 in philiri_elementary_grades %}<td></td>{% endif %}
+                      {% if 6 in philiri_elementary_grades %}<td></td>{% endif %}
+                      <td class="total-label"><strong>TOTAL LEARNERS:</strong></td>
+                      <td class="grand-total">
+                        <strong><span data-grand-total="elem">0</span> learners</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
+            
+            <!-- Junior High PHILIRI (Grades 7-10) - Only show if school offers these grades -->
+            {% if philiri_junior_grades %}
+            <div class="assessment-level-card">
+              <h3 class="level-title">{{ form.instance.get_level_display }} Level Results - Junior High (Grades 7-10)</h3>
+              
+              <div class="assessment-matrix">
+                <table class="reading-matrix-table">
+                  <thead>
+                    <tr>
+                      <th class="subject-col">Subject / Grade</th>
+                      {% if 7 in philiri_junior_grades %}<th>Grade 7</th>{% endif %}
+                      {% if 8 in philiri_junior_grades %}<th>Grade 8</th>{% endif %}
+                      {% if 9 in philiri_junior_grades %}<th>Grade 9</th>{% endif %}
+                      {% if 10 in philiri_junior_grades %}<th>Grade 10</th>{% endif %}
+                      <th class="total-col">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="subject-label">English</td>
+                      {% if 7 in philiri_junior_grades %}<td>{{ form.eng_grade_7 }}</td>{% endif %}
+                      {% if 8 in philiri_junior_grades %}<td>{{ form.eng_grade_8 }}</td>{% endif %}
+                      {% if 9 in philiri_junior_grades %}<td>{{ form.eng_grade_9 }}</td>{% endif %}
+                      {% if 10 in philiri_junior_grades %}<td>{{ form.eng_grade_10 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="eng-junior">0</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="subject-label">Filipino</td>
+                      {% if 7 in philiri_junior_grades %}<td>{{ form.fil_grade_7 }}</td>{% endif %}
+                      {% if 8 in philiri_junior_grades %}<td>{{ form.fil_grade_8 }}</td>{% endif %}
+                      {% if 9 in philiri_junior_grades %}<td>{{ form.fil_grade_9 }}</td>{% endif %}
+                      {% if 10 in philiri_junior_grades %}<td>{{ form.fil_grade_10 }}</td>{% endif %}
+                      <td class="total-cell">
+                        <span class="total-value" data-total="fil-junior">0</span>
+                      </td>
+                    </tr>
+                    <tr class="total-row">
+                      {% if 7 in philiri_junior_grades %}<td></td>{% endif %}
+                      {% if 8 in philiri_junior_grades %}<td></td>{% endif %}
+                      {% if 9 in philiri_junior_grades %}<td></td>{% endif %}
+                      {% if 10 in philiri_junior_grades %}<td></td>{% endif %}
+                      <td class="total-label"><strong>TOTAL LEARNERS:</strong></td>
+                      <td class="grand-total">
+                        <strong><span data-grand-total="junior">0</span> learners</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
+            
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- INTERVENTIONS -->
+        <div class="assessment-section">
+          <h2 class="assessment-title">Interventions Developed Based on Assessment Results</h2>
+          
+          {{ reading_interventions_new_formset.management_form }}
+          
+          <div class="interventions-list">
+            {% for form in reading_interventions_new_formset %}
+              {{ form.id }}
+              {{ form.order }}
+              <div class="intervention-item">
+                <label class="intervention-label">{{ forloop.counter }}.</label>
+                <div class="intervention-input">
+                  {{ form.description }}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        
+        {# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="slp">Previous</button>
+          <div style="display: flex; gap: 0.75rem;">
+            {% if can_edit %}
+            <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+            {% endif %}
+            <button type="button" class="btn btn--primary tab-nav" data-nav-target="rma">Next</button>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if current_tab == 'rma' %}
+        <div class="section-card">
+          <div class="section-card__header">Rapid Math Assessment (RMA)</div>
+          <div class="section-card__intro">
+            <p>Distribute learners per score band; totals per grade must not exceed enrolment.</p>
+          </div>
+          
+          {{ rma_row_formset.management_form }}
+          
+          <div class="data-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Grade</th>
+                  <th>Enrolment</th>
+                  <th>Not Proficient<br><small>(Below 25%)</small></th>
+                  <th>Low Proficient<br><small>(25%-49%)</small></th>
+                  <th>Nearly Proficient<br><small>(50%-74%)</small></th>
+                  <th>Proficient<br><small>(75%-84%)</small></th>
+                  <th>At Grade Level<br><small>(Above 85%)</small></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for form in rma_row_formset %}
+                  {{ form.id }}
+                  {{ form.grade_label }}
+                  <tr>
+                    <td>{{ form.instance.get_grade_label_display }}</td>
+                    <td>{{ form.enrolment }}</td>
+                    <td>{{ form.emerging_not_proficient }}</td>
+                    <td>{{ form.emerging_low_proficient }}</td>
+                    <td>{{ form.developing_nearly_proficient }}</td>
+                    <td>{{ form.transitioning_proficient }}</td>
+                    <td>{{ form.at_grade_level }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="section-card">
+          <div class="section-card__header">RMA Interventions (Top 5)</div>
+          <div class="section-card__intro">
+            <p>Highlight the priority remedial programs tied to the RMA results.</p>
+          </div>
+          
+          {{ rma_intervention_formset.management_form }}
+          
+          {% for form in rma_intervention_formset %}
+            {{ form.id }}
+            {{ form.order }}
+            <div class="form-field">
+              <label class="form-label">Intervention {{ forloop.counter }}</label>
+              {{ form.description }}
+            </div>
+          {% endfor %}
+        </div>
+        
+        {# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="reading">Previous</button>
+          <div style="display: flex; gap: 0.75rem;">
+            {% if can_edit %}
+            <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+            {% endif %}
+            <button type="button" class="btn btn--primary tab-nav" data-nav-target="supervision">Next</button>
+          </div>
+        </div>
+      {% endif %}
+      {% if current_tab == 'supervision' %}
+        <div class="card">
+          <h3 style="margin-bottom: 1rem;">V. INSTRUCTIONAL SUPERVISION AND TA IMPLEMENTATION</h3>
+          
+          {{ supervision_formset.management_form }}
+          
+          <table class="data-table supervision-table">
+            <thead>
+              <tr>
+                <th>Number of Teachers Supervised, Observed and Provided TA</th>
+                <th>Intervention Support Provided</th>
+                <th>Result</th>
+                  {% if supervision_formset.can_delete %}
+                  <th style="width: 90px;">Action</th>
+                  {% endif %}
+                </tr>
+              </thead>
+              <tbody>
+              {% for form in supervision_formset %}
+                {{ form.id }}
+                <tr class="supervision-row">
+                  <td>{{ form.teachers_supervised_observed_ta }}</td>
+                  <td>{{ form.intervention_support_provided }}</td>
+                  <td>{{ form.result }}</td>
+                  {% if supervision_formset.can_delete %}
+                  <td style="text-align: center;">
+                    {% if forloop.counter > 1 %}
+                      <div style="display:none">{{ form.DELETE }}</div>
+                      <button type="button" class="btn btn--danger btn--small supervision-delete-btn">Delete</button>
+                    {% else %}
+                      <span style="font-size: 0.75rem; color: #9ca3af;">&mdash;</span>
+                    {% endif %}
+                  </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+              </tbody>
+          </table>
+          <script>
+            (function() {
+              document.addEventListener('click', function(ev) {
+                var btn = ev.target.closest && ev.target.closest('.supervision-delete-btn');
+                if (!btn) return;
+                var row = btn.closest('.supervision-row');
+                if (!row) return;
+                var del = row.querySelector('input[name*="-DELETE"]');
+                if (!confirm('Are you sure you want to remove this supervision record?')) return;
+                if (del) del.checked = true;
+                // Hide the row but keep inputs for existing forms
+                row.classList.add('supervision-row--removed');
+                row.style.display = 'none';
+                // If helper exists, let core JS renumber and bind
+                try {
+                  if (typeof renumberSupervisionRows === 'function') renumberSupervisionRows();
+                  if (typeof attachSupervisionDeleteHandlers === 'function') attachSupervisionDeleteHandlers();
+                } catch (e) {}
+              });
+            })();
+          </script>
+        </div>
+
+        {# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="rma">Previous</button>
+          <div style="display: flex; gap: 0.75rem;">
+            {% if can_edit %}
+            <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+            {% endif %}
+            <button type="button" class="btn btn--primary tab-nav" data-nav-target="adm">Next</button>
+          </div>
+        </div>
+      {% endif %}
+      {% if current_tab == 'adm' %}
+        {# ADM Header - "Is Offered" Checkbox #}
+        {% if adm_header_form %}
+          <div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid #3b82f6;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              {% with adm_header_form.is_offered as field %}
+                <input type="hidden" name="{{ field.html_name }}" value="0">
+                <label for="{{ field.id_for_label }}" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0; font-weight: 600; font-size: 1rem;">
+                  <input type="checkbox"
+                         name="{{ field.html_name }}"
+                         id="{{ field.id_for_label }}"
+                         class="adm-offered-checkbox"
+                         onchange="toggleADMFields(this.checked)"
+                         {% if adm_is_offered %}checked{% endif %}>
+                  <span>School implements Alternative Delivery Mode (ADM)</span>
+                </label>
+                {% if field.errors %}
+                  <div class="form-error">{{ field.errors|join:", " }}</div>
+                {% endif %}
+              {% endwith %}
+            </div>
+            <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.875rem; color: #6b7280;">
+              Uncheck this box if your school does not implement ADM programs. All ADM fields below will be disabled.
+            </p>
+          </div>
+        {% endif %}
+
+        {# ADM Table and Questions #}
+        {% if adm_formset %}
+        {{ adm_formset.management_form }}
+        
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="margin: 0;">VI. REPORT ON THE IMPLEMENTATION OF ADM ONE-STOP-SHOP & EiE (For Schools Implementing ADM Only)</h3>
+            <button type="button" class="btn btn--primary" id="add-adm-ppa" style="white-space: nowrap;">Add PPA</button>
+          </div>
+          
+          {# Single ADM Table with Multiple Rows #}
+          <div style="overflow-x: auto; margin-bottom: 2rem;">
+            <table class="data-table adm-table" style="width: 100%; border-collapse: collapse; margin-bottom: 1.5rem;">
+              <thead>
+                <tr style="background-color: #f3f4f6;">
+                  <th rowspan="2" style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; vertical-align: middle; min-width: 200px;">PPAS Conducted</th>
+                  <th colspan="3" style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center;">Physical</th>
+                  <th colspan="4" style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center;">Utilization of Funds</th>
+                  <th rowspan="2" style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; vertical-align: middle; width: 80px;">Action</th>
+                </tr>
+                <tr style="background-color: #f3f4f6;">
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 80px;">Target</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 80px;">Actual</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 100px;">% of Actual Accomplishment</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 100px;">Downloaded</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 100px;">Obligated</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 100px;">Unobligated</th>
+                  <th style="border: 1px solid #d1d5db; padding: 0.75rem; text-align: center; font-style: italic; min-width: 100px;">% Age/ BUR</th>
+                </tr>
+              </thead>
+              <tbody id="adm-table-body">
+                {% for form in adm_formset %}
+                  <tr class="adm-row" data-form-index="{{ forloop.counter0 }}">
+                    {{ form.id }}
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.ppas_conducted }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.ppas_physical_target }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.ppas_physical_actual }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.ppas_physical_percent }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.funds_downloaded }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.funds_obligated }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.funds_unobligated }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem;">
+                      {{ form.funds_percent_obligated }}
+                    </td>
+                    <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align: center;">
+                      {% if adm_formset.can_delete and forloop.counter > 1 %}
+                        <label style="display: flex; align-items: center; justify-content: center; gap: 0.25rem; margin: 0; cursor: pointer;" class="adm-delete-control">
+                          {{ form.DELETE }}
+                          <span class="adm-delete-text" style="font-size: 0.75rem; color: #dc2626;">Remove</span>
+                        </label>
+                      {% else %}
+                        <span style="font-size: 0.75rem; color: #9ca3af;">Ã¢â‚¬â€</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                {# Hidden template row for JS cloning (uses __prefix__) #}
+                {% if adm_formset.empty_form %}
+                {% with form=adm_formset.empty_form %}
+                <tr class="adm-row adm-row-template" data-form-index="__prefix__" style="display:none;">
+                  {{ form.id }}
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.ppas_conducted }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.ppas_physical_target }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.ppas_physical_actual }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.ppas_physical_percent }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_downloaded }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_obligated }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_unobligated }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem;">{{ form.funds_percent_obligated }}</td>
+                  <td style="border: 1px solid #d1d5db; padding: 0.5rem; text-align:center;">
+                    <label class="adm-delete-control" style="display:flex; align-items:center; justify-content:center; gap:0.25rem; margin:0; cursor:pointer;">
+                      {{ form.DELETE }}
+                      <span class="adm-delete-text" style="font-size:0.75rem; color:#dc2626;">Remove</span>
+                    </label>
+                  </td>
+                </tr>
+                {% endwith %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+
+          {# Analysis Questions - Appears Once for All PPAs #}
+          {% if adm_formset.forms %}
+            {% with first_form=adm_formset.forms.0 %}
+            <div style="margin-bottom: 2rem;">
+              <h4 style="margin-bottom: 1rem; font-weight: 600;">Analysis:</h4>
+              
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                  1. What were those factors that had helped you facilitate your PPAs?
+                </label>
+                {{ first_form.q1_response }}
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                  2. Do all your PPA's really address what it intends to address?
+                </label>
+                {{ first_form.q2_response }}
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                  3. What PPAs/ Best practice do you intend to sustain or enhance? Why?
+                </label>
+                {{ first_form.q3_response }}
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                  4. What PPAs do you intend to drop or improved? Why?
+                </label>
+                {{ first_form.q4_response }}
+              </div>
+
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">
+                  5. Overall, how significant is ADM implementation in your school?
+                </label>
+                {{ first_form.q5_response }}
+              </div>
+            </div>
+            {% endwith %}
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {# Signatories Section #}
+        <div class="section-card" style="margin-top: 2rem;">
+          <div class="section-card__header">Signatories</div>
+          <div class="section-card__intro">
+            <p>Use the name/position that appears on the paper form.</p>
+          </div>
+          
+          {% if signatories_form.non_field_errors %}
+          <div class="form-error">
+            {{ signatories_form.non_field_errors|join:", " }}
+          </div>
+          {% endif %}
+
+          <div class="form-field">
+            <label class="form-label" for="{{ signatories_form.prepared_by.id_for_label }}">Name of the School Head</label>
+            {{ signatories_form.prepared_by }}
+            {% if signatories_form.prepared_by.errors %}
+              <div class="form-error">
+                {{ signatories_form.prepared_by.errors|join:", " }}
+              </div>
+            {% endif %}
+          </div>
+          <div style="display:none">{{ signatories_form.submitted_to }}</div>
+        </div>
+
+        {# Submit Button for ADM Tab #}
+        {% if can_submit %}
+        <div class="section-card" style="margin-top: 2rem; padding: 1.5rem; background: #f0fdf4; border: 1px solid #86efac;">
+          <div class="section-card__header" style="color: #16a34a;">Ready to Submit?</div>
+          <p style="margin-bottom: 1.5rem;">Review all tabs and ensure all required information is complete before submitting to your section head.</p>
+          <button type="submit" class="btn btn--success" name="action" value="submit_submission">
+            Submit to Section
+          </button>
+        </div>
+        {% endif %}
+
+        {# Navigation Buttons #}
+        <div style="display: flex; justify-content: space-between; margin-top: 2rem;">
+          <button type="button" class="btn btn--secondary tab-nav" data-nav-target="supervision">Previous</button>
+          {% if can_edit %}
+          <button type="submit" class="btn btn--primary" name="action" value="save_draft">Save Draft</button>
+          {% endif %}
+        </div>
+      {% endif %}
+
+    </form>
+    </div>
+
+    <!-- Form navigation and validation script -->
+    <script src="{% static 'js/submission-form.js' %}"></script>
+
+    <!-- SLP Tests disabled for production -->
+    {% comment %}
+    {% if current_tab == 'slp' and debug %}
+    <script src="{% static 'js/slp-tests.js' %}"></script>
+    {% endif %}
+    {% endcomment %}
+
+
+  </body>
+</html>
+
+
+
+
