@@ -80,6 +80,29 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         try { rdStorage.value = JSON.stringify(data); } catch(e) { rdStorage.value = '[]'; }
       }
+
+      // Serialize new RMA difficulties (Pre-Test Q3 and EOSY Q1)
+      function serializeRMA(selectorStorage, selectorPlan) {
+        const storage = document.querySelector(selectorStorage);
+        const planRoot = document.querySelector(selectorPlan);
+        if (!storage || !planRoot) return;
+        const data = [];
+        planRoot.querySelectorAll('.rma-difficulty-grade').forEach(gradeEl => {
+          const grade = gradeEl.getAttribute('data-grade');
+          const pairs = [];
+          gradeEl.querySelectorAll('.rma-difficulty-pair').forEach(pairEl => {
+            const diffTa = pairEl.querySelector('textarea.rma-difficulty-textarea');
+            const intTa = pairEl.querySelector('textarea.rma-intervention-textarea');
+            const difficulty = diffTa ? (diffTa.value || '').trim() : '';
+            const intervention = intTa ? (intTa.value || '').trim() : '';
+            if (difficulty || intervention) pairs.push({ difficulty, intervention });
+          });
+          data.push({ grade, pairs });
+        });
+        try { storage.value = JSON.stringify(data); } catch (e) { storage.value = '[]'; }
+      }
+      serializeRMA('.rma-pretest-storage', '.rma-pretest-plan');
+      serializeRMA('.rma-eosy-storage', '.rma-eosy-plan');
     });
     const canEdit = (form.dataset.canEdit === '1');
     const nextTabInput = byId('id_next_tab');
@@ -721,6 +744,32 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Initialize RMA difficulties builders from hidden JSON
+  function initializeRMADifficulties() {
+    function hydrate(selectorStorage, selectorPlan) {
+      const storage = document.querySelector(selectorStorage);
+      const planRoot = document.querySelector(selectorPlan);
+      if (!storage || !planRoot) return;
+      let saved = [];
+      try { saved = storage.value ? JSON.parse(storage.value) : []; } catch (e) { saved = []; }
+      saved.forEach(entry => {
+        const gradeEl = planRoot.querySelector(`.rma-difficulty-grade[data-grade="${entry.grade}"]`);
+        if (!gradeEl) return;
+        const pairs = entry.pairs || [];
+        pairs.forEach((pair, idx) => {
+          const pairEl = gradeEl.querySelectorAll('.rma-difficulty-pair')[idx];
+          if (!pairEl) return;
+          const diffTa = pairEl.querySelector('textarea.rma-difficulty-textarea');
+          const intTa = pairEl.querySelector('textarea.rma-intervention-textarea');
+          if (diffTa) diffTa.value = pair.difficulty || '';
+          if (intTa) intTa.value = pair.intervention || '';
+        });
+      });
+    }
+    hydrate('.rma-pretest-storage', '.rma-pretest-plan');
+    hydrate('.rma-eosy-storage', '.rma-eosy-plan');
+  }
+
   // Track which SLP subject is being saved so the server can resolve it
   function wireSLPSaveSubject() {
     const form = document.getElementById('submission-form');
@@ -1156,6 +1205,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initializeSLPCompetenciesAndReasons();
     initializeSLPNestedAccordion();
     initializeReadingDifficulties();
+    initializeRMADifficulties();
     wireSLPSaveSubject();
     // ADM helpers
     const admToggle = document.querySelector('.adm-offered-checkbox');

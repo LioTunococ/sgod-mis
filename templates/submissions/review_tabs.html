@@ -450,27 +450,16 @@
     {% elif current_tab == 'supervision' %}
       <section class="card">
         <h3>Instructional Supervision &amp; TA</h3>
+        <p class="muted">INSTRUCTIONAL SUPERVISION AND TA IMPLEMENTATION (For Schools without full-fledged School Heads the data should come from the Master Teacher)</p>
         {% if supervision_rows %}
-          <table>
-            <thead>
-              <tr>
-                <th>Grade / Teacher</th>
-                <th>Teachers Supervised / Observed / TA</th>
-                <th>Intervention / Support</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in supervision_rows %}
-                <tr>
-                  <td>{{ row.grade_label|default:'-' }}</td>
-                  <td>{{ row.teachers_supervised_observed_ta|default:'-' }}</td>
-                  <td>{{ row.intervention_support_provided|linebreaksbr|default:'-' }}</td>
-                  <td>{{ row.result|linebreaksbr|default:'-' }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          {% for row in supervision_rows %}
+            <article class="card" style="margin-top:1rem;">
+              <h4>Entry {{ forloop.counter }}</h4>
+              <p><strong>Top 3 Development Areas:</strong><br><span style="white-space:pre-line;">{{ row.result|default:'-' }}</span></p>
+              <p><strong>Recommendation Provided by the Observer:</strong><br><span style="white-space:pre-line;">{{ row.intervention_support_provided|default:'-' }}</span></p>
+              <p><strong>Date of Follow-Up Observation:</strong> {{ row.grade_label|default:'-' }}</p>
+            </article>
+          {% endfor %}
         {% else %}
           <p class="muted">No supervision records submitted.</p>
         {% endif %}

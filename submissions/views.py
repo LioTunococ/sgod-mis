@@ -1558,7 +1558,31 @@ def edit_submission(request, submission_id, submission_obj=None):
                             rows_valid = False
                 if rows_valid and interventions_valid:
                     rma_row_formset.save()
-                    rma_intervention_formset.save()
+                    # Persist new RMA structured difficulties/interventions JSON (optional)
+                    try:
+                        pre_json = request.POST.get('rma_pretest_json')
+                        eosy_json = request.POST.get('rma_eosy_json')
+                        data = dict(submission.data or {})
+                        if pre_json is not None:
+                            try:
+                                data['rma_pretest_json'] = json.loads(pre_json) if pre_json.strip() else []
+                            except Exception:
+                                data['rma_pretest_json'] = []
+                        if eosy_json is not None:
+                            try:
+                                data['rma_eosy_json'] = json.loads(eosy_json) if eosy_json.strip() else []
+                            except Exception:
+                                data['rma_eosy_json'] = []
+                        if pre_json is not None or eosy_json is not None:
+                            submission.data = data
+                            submission.save(update_fields=['data'])
+                    except Exception:
+                        pass
+                    # Keep saving legacy interventions if posted/bound
+                    try:
+                        rma_intervention_formset.save()
+                    except Exception:
+                        pass
                     success = True
             elif current_tab == "supervision":
                 if supervision_formset.is_valid() and signatories_form.is_valid():
@@ -1710,6 +1734,9 @@ def edit_submission(request, submission_id, submission_obj=None):
         # Reading difficulties serialized storage
         "reading_difficulties_json_dump": json.dumps(submission.data.get('reading_difficulties_json', [])),
         "reading_difficulties_json": submission.data.get('reading_difficulties_json', []),
+        # RMA structured difficulties storage (Pre-Test/Q3, EOSY/Q1)
+        "rma_pretest_json_dump": json.dumps(submission.data.get('rma_pretest_json', [])),
+        "rma_eosy_json_dump": json.dumps(submission.data.get('rma_eosy_json', [])),
         # Provide simple grade range for Reading Difficulties builder
     # Provide only Grades 1-10 actually offered by the school for Reading Difficulties builder
     "reading_grade_range": [g for g in school_grades if 1 <= g <= 10],

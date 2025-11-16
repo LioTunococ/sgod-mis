@@ -1461,29 +1461,21 @@ Form1RMAInterventionFormSet = modelformset_factory(
 
 
 Form1SupervisionRowFormSet = modelformset_factory(
-
     Form1SupervisionRow,
-
     form=Form1SupervisionRowForm,
-
-    extra=0,
-
+    extra=3,
     can_delete=True,
-
+    max_num=3,
 )
 
 
 
 Form1ADMRowFormSet = modelformset_factory(
-
     Form1ADMRow,
-
     form=Form1ADMRowForm,
-
-    extra=0,
-
+    extra=3,
     can_delete=True,
-
+    max_num=20,
 )
 
 
