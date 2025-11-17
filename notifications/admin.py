@@ -6,7 +6,7 @@ from .models import EmailNotification
 @admin.register(EmailNotification)
 class EmailNotificationAdmin(admin.ModelAdmin):
     list_display = ("to_email", "subject", "status", "retry_count", "created_at", "sent_at")
-    list_filter = ("status", "created_at")
+    list_filter = ("status", "retry_count", "created_at")
     search_fields = ("to_email", "subject", "body")
     readonly_fields = ("created_at", "sent_at", "error_message", "last_attempt_at")
     actions = ["action_resend_now", "action_requeue"]

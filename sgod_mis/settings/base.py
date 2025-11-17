@@ -124,6 +124,9 @@ Priority (by environment):
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
+# Public site URL for absolute links in notifications (e.g., https://yourdomain)
+SITE_URL = os.getenv('SITE_URL', '').rstrip('/')
+
 # 1) Anymail (HTTP API; recommended for PythonAnywhere free)
 ANYMAIL_PROVIDER = os.getenv('ANYMAIL_PROVIDER', '').strip().lower()
 if ANYMAIL_PROVIDER:

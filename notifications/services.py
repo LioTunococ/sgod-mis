@@ -3,10 +3,22 @@ from __future__ import annotations
 from typing import Optional
 from django.conf import settings
 from .models import EmailNotification
+from django.db.models import Q
 
 
 def queue_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> EmailNotification:
-    """Create a pending email notification without sending immediately."""
+    """Create a pending email notification.
+
+    Duplicate suppression: if an identical pending notification (same to_email + subject)
+    already exists, do not create a new one; instead return existing.
+    """
+    existing = EmailNotification.objects.filter(
+        to_email__iexact=to_email,
+        subject=subject,
+        status=EmailNotification.Status.PENDING,
+    ).first()
+    if existing:
+        return existing
     notif = EmailNotification.objects.create(
         to_email=to_email,
         subject=subject,
@@ -18,7 +30,6 @@ def queue_email(to_email: str, subject: str, body: str, html_body: str | None = 
         if getattr(settings, "NOTIFICATIONS_SEND_IMMEDIATELY", False):
             notif.send()
     except Exception:
-        # Don't block on errors here
         pass
     return notif
 
