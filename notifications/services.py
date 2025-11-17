@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 from typing import Optional
+from django.conf import settings
 from .models import EmailNotification
 
 
 def queue_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> EmailNotification:
     """Create a pending email notification without sending immediately."""
-    return EmailNotification.objects.create(
+    notif = EmailNotification.objects.create(
         to_email=to_email,
         subject=subject,
         body=body,
         html_body=html_body or "",
     )
+    # Optional: send immediately if configured (useful on platforms without a scheduler)
+    try:
+        if getattr(settings, "NOTIFICATIONS_SEND_IMMEDIATELY", False):
+            notif.send()
+    except Exception:
+        # Don't block on errors here
+        pass
+    return notif
 
 
 def send_email_now(to_email: str, subject: str, body: str, html_body: str | None = None) -> bool:

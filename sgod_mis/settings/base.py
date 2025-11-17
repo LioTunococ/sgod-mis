@@ -153,6 +153,9 @@ EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', '0').lower() in {'1','true','yes','on
 if EMAIL_USE_SSL:
     EMAIL_USE_TLS = False  # mutually exclusive
 
+# Notifications behaviour: set to '1' to send immediately upon queue
+NOTIFICATIONS_SEND_IMMEDIATELY = os.getenv('NOTIFICATIONS_SEND_IMMEDIATELY', '0').lower() in {'1','true','yes','on'}
+
 # Optional: Anymail (SendGrid/Mailgun/etc.) for HTTPS email delivery (PythonAnywhere-friendly)
 ANYMAIL = {}
 sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
