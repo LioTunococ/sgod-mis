@@ -325,6 +325,7 @@ class Submission(models.Model):
                 period_label = getattr(self.period, "label", "")
                 from django.template.loader import render_to_string
                 from django.utils.html import strip_tags
+                site_url = getattr(settings, 'SITE_URL', '')
                 if target_status == self.Status.RETURNED:
                     subject = f"Returned: {form_title} — {section_name} ({period_label})"
                     ctx = {
@@ -333,6 +334,7 @@ class Submission(models.Model):
                         "period": period_label,
                         "remarks": remarks or "No remarks provided.",
                         "status": "returned",
+                        "site_url": site_url,
                     }
                 elif target_status == self.Status.NOTED:
                     subject = f"Noted: {form_title} — {section_name} ({period_label})"
@@ -342,6 +344,7 @@ class Submission(models.Model):
                         "period": period_label,
                         "remarks": remarks or "No remarks.",
                         "status": "noted",
+                        "site_url": site_url,
                     }
                 elif target_status == self.Status.SUBMITTED:
                     # Optional: notify school confirmation of submission
@@ -352,6 +355,7 @@ class Submission(models.Model):
                         "period": period_label,
                         "remarks": "",
                         "status": "submitted",
+                        "site_url": site_url,
                     }
                 else:
                     subject = None

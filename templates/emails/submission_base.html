@@ -22,7 +22,12 @@
         {% block content %}{% endblock %}
         <hr>
         <div class="footer">
-          This is an automated message from SGOD MIS. Do not reply.
+          This is an automated message from SGOD MIS. Do not reply.<br>
+          {% if site_url %}
+            <a href="{{ site_url }}" style="color:#2563eb;">Open SGOD MIS</a>
+          {% else %}
+            Login to the system for more details.
+          {% endif %}
         </div>
       </div>
     </div>
