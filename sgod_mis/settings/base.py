@@ -124,15 +124,16 @@ Priority (by environment):
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
-# 1) Anymail (HTTP API; recommended for PythonAnywhere free)
+// 1) Anymail (HTTP API; recommended for PythonAnywhere free)
 ANYMAIL_PROVIDER = os.getenv('ANYMAIL_PROVIDER', '').strip().lower()
 if ANYMAIL_PROVIDER:
     EMAIL_BACKEND = f"anymail.backends.{ANYMAIL_PROVIDER}.EmailBackend"
-    # Populate common provider keys from env if present
+    # Accept both MAILGUN_SENDER_DOMAIN and MAILGUN_DOMAIN for convenience
+    _mailgun_sender_domain = os.getenv('MAILGUN_SENDER_DOMAIN') or os.getenv('MAILGUN_DOMAIN', '')
     ANYMAIL = {
         # Mailgun
         'MAILGUN_API_KEY': os.getenv('MAILGUN_API_KEY', ''),
-        'MAILGUN_SENDER_DOMAIN': os.getenv('MAILGUN_SENDER_DOMAIN', ''),
+        'MAILGUN_SENDER_DOMAIN': _mailgun_sender_domain,
         # SendGrid
         'SENDGRID_API_KEY': os.getenv('SENDGRID_API_KEY', ''),
         # Mailjet
@@ -156,20 +157,10 @@ if EMAIL_USE_SSL:
 # Notifications behaviour: set to '1' to send immediately upon queue
 NOTIFICATIONS_SEND_IMMEDIATELY = os.getenv('NOTIFICATIONS_SEND_IMMEDIATELY', '0').lower() in {'1','true','yes','on'}
 
-# Optional: Anymail (SendGrid/Mailgun/etc.) for HTTPS email delivery (PythonAnywhere-friendly)
-ANYMAIL = {}
-sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
-mailgun_api_key = os.getenv('MAILGUN_API_KEY')
-mailgun_domain = os.getenv('MAILGUN_DOMAIN')
-if sendgrid_api_key:
-    EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
-    ANYMAIL = {
-        'SENDGRID_API_KEY': sendgrid_api_key,
-    }
-elif mailgun_api_key and mailgun_domain:
-    EMAIL_BACKEND = 'anymail.backends.mailgun.EmailBackend'
-    ANYMAIL = {
-        'MAILGUN_API_KEY': mailgun_api_key,
-        'MAILGUN_SENDER_DOMAIN': mailgun_domain,
-    }
+# If DEFAULT_FROM_EMAIL not provided and Mailgun sender domain exists, derive a sensible default
+if DEFAULT_FROM_EMAIL == 'no-reply@localhost':
+    _derived_sender_domain = os.getenv('MAILGUN_SENDER_DOMAIN') or os.getenv('MAILGUN_DOMAIN')
+    if _derived_sender_domain:
+        DEFAULT_FROM_EMAIL = f"no-reply@{_derived_sender_domain}"
+        SERVER_EMAIL = DEFAULT_FROM_EMAIL
 

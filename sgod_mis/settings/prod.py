@@ -51,3 +51,6 @@ LOGGING = {
 	},
 	"root": {"handlers": ["console"], "level": os.getenv("LOG_LEVEL", "INFO")},
 }
+
+# In production, default to immediate-send for notifications unless explicitly disabled
+NOTIFICATIONS_SEND_IMMEDIATELY = os.getenv("NOTIFICATIONS_SEND_IMMEDIATELY", "1").lower() in {"1", "true", "yes", "on"}
