@@ -20,6 +20,9 @@
     <div class="container">
       <div class="card">
         {% block content %}{% endblock %}
+        {% if submission_url %}
+          <p><a href="{{ submission_url }}" class="btn" style="background:#1d4ed8;color:#fff;">View Submission</a></p>
+        {% endif %}
         <hr>
         <div class="footer">
           This is an automated message from SGOD MIS. Do not reply.<br>

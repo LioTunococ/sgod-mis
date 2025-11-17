@@ -326,6 +326,8 @@ class Submission(models.Model):
                 from django.template.loader import render_to_string
                 from django.utils.html import strip_tags
                 site_url = getattr(settings, 'SITE_URL', '')
+                submission_path = f"/submissions/submission/{self.id}/"  # matches submissions.urls pattern name edit_submission
+                submission_url = f"{site_url}{submission_path}" if site_url else submission_path
                 if target_status == self.Status.RETURNED:
                     subject = f"Returned: {form_title} — {section_name} ({period_label})"
                     ctx = {
@@ -335,6 +337,7 @@ class Submission(models.Model):
                         "remarks": remarks or "No remarks provided.",
                         "status": "returned",
                         "site_url": site_url,
+                        "submission_url": submission_url,
                     }
                 elif target_status == self.Status.NOTED:
                     subject = f"Noted: {form_title} — {section_name} ({period_label})"
@@ -345,6 +348,7 @@ class Submission(models.Model):
                         "remarks": remarks or "No remarks.",
                         "status": "noted",
                         "site_url": site_url,
+                        "submission_url": submission_url,
                     }
                 elif target_status == self.Status.SUBMITTED:
                     # Optional: notify school confirmation of submission
@@ -356,6 +360,7 @@ class Submission(models.Model):
                         "remarks": "",
                         "status": "submitted",
                         "site_url": site_url,
+                        "submission_url": submission_url,
                     }
                 else:
                     subject = None
