@@ -26,6 +26,7 @@ class SchoolProfileForm(forms.ModelForm):
         fields = [
             "head_name",
             "head_contact",
+            "notification_email",
             "grade_span_start",
             "grade_span_end",
             "strands",
@@ -76,6 +77,13 @@ class SchoolProfileForm(forms.ModelForm):
                     seen.add(s2)
         cleaned["strands"] = combined
         return cleaned
+
+    notification_email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={"class": "form-input", "placeholder": "notifications@example.com"}),
+        label="Notification Email",
+        help_text="Email used for receiving automated system notifications."
+    )
 
 
 class SchoolForm(forms.ModelForm):

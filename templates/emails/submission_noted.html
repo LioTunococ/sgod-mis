@@ -1,0 +1,14 @@
+{% extends "emails/submission_base.html" %}
+{% block content %}
+<h2 style="margin-top:0;">Submission Marked as Noted</h2>
+<p class="meta">
+  <span class="badge">{{ status|title }}</span>
+</p>
+<p>
+  Your submission <strong>{{ title }}</strong> for <strong>{{ section }}</strong> ({{ period }}) was marked as <strong>Noted</strong>.
+</p>
+{% if remarks %}
+<p class="remarks"><strong>Section remarks:</strong><br>{{ remarks }}</p>
+{% endif %}
+<p class="muted">Thank you for your timely submission.</p>
+{% endblock %}

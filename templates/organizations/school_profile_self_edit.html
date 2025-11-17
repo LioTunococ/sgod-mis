@@ -50,6 +50,12 @@
           <p class="muted">Include phone number or email address for quick coordination.</p>
           {{ form.head_contact.errors }}
         </div>
+        <div class="form-field">
+          <label for="{{ form.notification_email.id_for_label }}">Notification Email</label>
+          {{ form.notification_email }}
+          <p class="muted">Used by the system to send automated updates.</p>
+          {{ form.notification_email.errors }}
+        </div>
         <div class="form-grid form-grid--two">
           <div class="form-field">
             <label for="{{ form.grade_span_start.id_for_label }}">Grade Span Start</label>

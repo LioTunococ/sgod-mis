@@ -110,3 +110,20 @@ LOGOUT_REDIRECT_URL = 'login'
 # (SLP matrix + analysis + interventions + RMA + projects). Default Django limit is 1000.
 # Adjusted to 20000 to prevent TooManyFieldsSent errors while retaining reasonable protection.
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 20000
+
+# --- Email / Notifications ---
+# Console backend by default (safe for dev); override in prod via env vars.
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# Optional SMTP settings (only used if EMAIL_BACKEND is an SMTP backend)
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587')) if os.getenv('EMAIL_HOST') else 587
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1').lower() in {'1','true','yes','on'}
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', '0').lower() in {'1','true','yes','on'}
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False  # mutually exclusive
+

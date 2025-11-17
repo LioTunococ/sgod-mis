@@ -315,6 +315,61 @@ class Submission(models.Model):
             to_status=target_status,
             remarks=remarks or "",
         )
+        # Notification hook: email school on important transitions
+        try:
+            profile = getattr(self.school, "profile", None)
+            to_email = getattr(profile, "notification_email", None)
+            if to_email:
+                form_title = getattr(self.form_template, "title", "Form")
+                section_name = getattr(getattr(self.form_template, "section", None), "name", "Section")
+                period_label = getattr(self.period, "label", "")
+                from django.template.loader import render_to_string
+                from django.utils.html import strip_tags
+                if target_status == self.Status.RETURNED:
+                    subject = f"Returned: {form_title} — {section_name} ({period_label})"
+                    ctx = {
+                        "title": form_title,
+                        "section": section_name,
+                        "period": period_label,
+                        "remarks": remarks or "No remarks provided.",
+                        "status": "returned",
+                    }
+                elif target_status == self.Status.NOTED:
+                    subject = f"Noted: {form_title} — {section_name} ({period_label})"
+                    ctx = {
+                        "title": form_title,
+                        "section": section_name,
+                        "period": period_label,
+                        "remarks": remarks or "No remarks.",
+                        "status": "noted",
+                    }
+                elif target_status == self.Status.SUBMITTED:
+                    # Optional: notify school confirmation of submission
+                    subject = f"Submitted: {form_title} — {section_name} ({period_label})"
+                    ctx = {
+                        "title": form_title,
+                        "section": section_name,
+                        "period": period_label,
+                        "remarks": "",
+                        "status": "submitted",
+                    }
+                else:
+                    subject = None
+                    ctx = None
+                if subject and ctx is not None:
+                    template_map = {
+                        "returned": "emails/submission_returned.html",
+                        "noted": "emails/submission_noted.html",
+                        "submitted": "emails/submission_submitted.html",
+                    }
+                    tpl = template_map.get(ctx["status"]) or "emails/submission_generic.html"
+                    html_body = render_to_string(tpl, ctx)
+                    text_body = strip_tags(html_body)
+                    from notifications.services import queue_email  # type: ignore
+                    queue_email(to_email=to_email, subject=subject, body=text_body, html_body=html_body)
+        except Exception:
+            # Non-blocking: never fail the transition due to notification issues
+            pass
 
     # --- Progress tracking methods -----------------------------------------
     

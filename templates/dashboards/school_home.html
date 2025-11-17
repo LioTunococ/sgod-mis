@@ -6,9 +6,11 @@
     <meta charset="utf-8">
     <title>School Portal</title>
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'css/school_home.css' %}">
   </head>
   <body class="container">
     {% include "includes/top_nav.html" %}
+    <a href="#main" class="skip-link">Skip to content</a>
 
     {% if not school_portal %}
       <div class="card card--wide" style="margin-top: 2rem; text-align: center; padding: 3rem;">
@@ -30,11 +32,11 @@
       </div>
     {% else %}
 
-    <!-- School Portal Hero -->
-    <section class="portal-hero">
-      <div class="portal-hero__header">
-        <div>
-          <h1>{{ school_portal.school.name }}</h1>
+    <!-- Page Layout: Sidebar + Main -->
+    <div class="portal-layout">
+      <aside class="portal-sidebar" aria-label="Sections">
+        <div class="portal-sidebar__header">
+          <h1 class="portal-sidebar__title">{{ school_portal.school.name }}</h1>
           <div class="portal-hero__meta">
             <span class="muted"><strong>Code:</strong> {{ school_portal.school.code }}</span>
             {% if school_portal.school.district %}
@@ -42,81 +44,80 @@
               <span class="muted"><strong>District:</strong> {{ school_portal.school.district.name }}</span>
             {% endif %}
           </div>
+          <div class="portal-sidebar__actions">
+            <a href="{% url 'organizations:edit_my_school_profile' %}" class="btn btn--secondary btn--sm">Update School Profile</a>
+          </div>
         </div>
-        <div class="portal-hero__actions">
-          <a href="{% url 'organizations:edit_my_school_profile' %}" class="btn btn--secondary btn--sm">
-            Update School Profile
-          </a>
-        </div>
-      </div>
 
-      {% if school_portal.profile_prompt %}
-        <div class="portal-hero__prompt">
-          <span>⚠</span>
-          <span>{{ school_portal.profile_prompt }}</span>
-        </div>
-      {% endif %}
+        {% if section_cards %}
+          <nav class="section-rail" role="navigation">
+            <div class="section-rail__label">Units</div>
+            <ul class="section-rail__list">
+              {% for card in section_cards %}
+                <li>
+                    <button type="button"
+                          class="rail-link {% if card.section.code == selected_section_code or not selected_section_code and forloop.first %}active{% endif %}"
+                      aria-current="{% if card.section.code == selected_section_code or not selected_section_code and forloop.first %}page{% endif %}"
+                      aria-controls="section-{{ card.section.code }}"
+                      data-section-code="{{ card.section.code }}"
+                          onclick="selectSection('{{ card.section.code }}', event)">
+                    <span class="rail-link__code">{{ card.section.code|upper }}</span>
+                    <span class="rail-link__badges">
+                      {% if card.drafts_count > 0 %}
+                        <span class="tab-badge">{{ card.drafts_count }}</span>
+                      {% endif %}
+                      {% if card.submitted_pending_count and card.submitted_pending_count > 0 %}
+                        <span class="tab-badge" style="background:#f59e0b">{{ card.submitted_pending_count }}</span>
+                      {% endif %}
+                      {% if card.noted_count and card.noted_count > 0 %}
+                        <span class="tab-badge" style="background:#16a34a">{{ card.noted_count }}</span>
+                      {% endif %}
+                      {% if card.open_count > 0 %}
+                        <span class="tab-badge">{{ card.open_count }}</span>
+                      {% endif %}
+                    </span>
+                  </button>
+                </li>
+              {% endfor %}
+            </ul>
+          </nav>
+        {% endif %}
 
-      <!-- Summary Stats -->
-      <div class="portal-hero__summary">
-        <div class="hero-summary__item">
-          <span class="hero-summary__label">In Progress</span>
-          <span class="hero-summary__value">{{ school_portal.summary.total_in_progress }}</span>
+        <div class="portal-sidebar__summary">
+          <div class="summary-chip">
+            <span>In Progress</span>
+            <strong>{{ school_portal.summary.total_in_progress }}</strong>
+          </div>
+          <div class="summary-chip">
+            <span>Submitted/Noted</span>
+            <strong>{{ school_portal.summary.total_submitted }}</strong>
+          </div>
+          <div class="summary-chip {% if school_portal.summary.returns > 0 %}summary-chip--alert{% endif %}">
+            <span>Returns</span>
+            <strong>{{ school_portal.summary.returns }}</strong>
+          </div>
+          <div class="summary-chip">
+            <span>Open Forms</span>
+            <strong>{{ school_portal.summary.open_forms }}</strong>
+          </div>
         </div>
-        <div class="hero-summary__item">
-          <span class="hero-summary__label">Submitted/Noted</span>
-          <span class="hero-summary__value">{{ school_portal.summary.total_submitted }}</span>
-        </div>
-        <div class="hero-summary__item">
-          <span class="hero-summary__label">Returns to Address</span>
-          <span class="hero-summary__value" style="{% if school_portal.summary.returns > 0 %}color: #dc2626;{% endif %}">{{ school_portal.summary.returns }}</span>
-        </div>
-        <div class="hero-summary__item">
-          <span class="hero-summary__label">Open Forms</span>
-          <span class="hero-summary__value">{{ school_portal.summary.open_forms }}</span>
-        </div>
-      </div>
-    </section>
+      </aside>
 
-    <!-- Multi-Unit Tabbed Dashboard -->
-    {% if section_cards %}
-    <section class="card" style="margin-bottom: 1.5rem;">
-      <div style="margin-bottom: 1.5rem;">
-        <h2>Form Submissions by Unit</h2>
-        <p class="muted">Manage your forms across all government units</p>
-      </div>
+      <main class="portal-main" id="main">
+        <!-- Page Intro / Alerts -->
+        {% if school_portal.profile_prompt %}
+          <div class="portal-hero__prompt" role="status">
+            <span aria-hidden="true">⚠</span>
+            <span>{{ school_portal.profile_prompt }}</span>
+          </div>
+        {% endif %}
 
-      <!-- Section Tabs -->
-      <div class="section-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb; overflow-x: auto; padding-bottom: 0;">
-        {% for card in section_cards %}
-          <button 
-            class="section-tab {% if card.section.code == selected_section_code or not selected_section_code and forloop.first %}active{% endif %}"
-            onclick="selectSection('{{ card.section.code }}', event)"
-            style="padding: 0.75rem 1.5rem; background: none; border: none; border-bottom: 3px solid transparent; color: #6b7280; font-weight: 500; font-size: 0.875rem; cursor: pointer; white-space: nowrap; transition: all 0.2s; position: relative;">
-            {{ card.section.code|upper }}
-            {% if card.drafts_count > 0 %}
-              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.5rem; background: #ef4444; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Drafts/Returns">
-                {{ card.drafts_count }}
-              </span>
-            {% endif %}
-            {% if card.submitted_pending_count and card.submitted_pending_count > 0 %}
-              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #f59e0b; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Submitted, awaiting review">
-                {{ card.submitted_pending_count }}
-              </span>
-            {% endif %}
-            {% if card.noted_count and card.noted_count > 0 %}
-              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #16a34a; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Noted">
-                {{ card.noted_count }}
-              </span>
-            {% endif %}
-            {% if card.open_count > 0 %}
-              <span class="tab-badge" style="display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.375rem; margin-left: 0.25rem; background: #ef4444; color: white; font-size: 0.75rem; font-weight: 600; border-radius: 9999px;" title="Open forms">
-                {{ card.open_count }}
-              </span>
-            {% endif %}
-          </button>
-        {% endfor %}
-      </div>
+        {% if section_cards %}
+        <section class="card" style="margin-bottom: 1.5rem;">
+          <div class="section-intro">
+            <h2>Form Submissions by Unit</h2>
+            <p class="muted">Manage your forms across all government units</p>
+          </div>
 
       <!-- Section Content Panels -->
       {% for card in section_cards %}
@@ -125,36 +126,37 @@
           id="section-{{ card.section.code }}"
           {% if card.section.code != selected_section_code and not forloop.first or selected_section_code and card.section.code != selected_section_code %}style="display: none;"{% endif %}>
           
-          <div style="margin-bottom: 1.5rem;">
-            <h3 style="font-size: 1.125rem; font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">
+          <div class="section-header">
+            <h3 class="section-title">
               {{ card.section.name }}
             </h3>
-            <p class="muted" style="font-size: 0.875rem;">
+            <p class="muted section-subtitle">
               Manage your {{ card.section.code|upper }} submissions
             </p>
           </div>
+          
 
           <!-- In Progress Forms for this Section -->
           {% if card.drafts_count > 0 %}
             <div style="margin-bottom: 2rem;">
-              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+              <h3 class="section-title" style="font-size: 1rem;">
                 In Progress ({{ card.drafts_count }})
               </h3>
-              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div class="list-vstack">
                 {% for draft in card.drafts %}
-                  <div style="padding: 1rem; background: #fefce8; border: 1px solid #fde047; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                  <div class="item-card item-card--progress">
                     <div style="flex: 1;">
-                      <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">
+                      <div class="item-title">
                         {{ draft.submission.form_template.title }}
                       </div>
-                      <div style="font-size: 0.875rem; color: #6b7280;">
+                      <div class="item-meta">
                         {% if draft.submission.period %}{{ draft.submission.period.label }}{% endif %}
                         {% if draft.progress > 0 %}
                           &middot; {{ draft.progress }}% complete
                         {% endif %}
                       </div>
                       {% if draft.submission.status == 'returned' %}
-                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #fef2f2; border-left: 3px solid #dc2626; font-size: 0.875rem; color: #991b1b;">
+                        <div class="item-note-return">
                           <strong>Returned for revision:</strong> {{ draft.submission.returned_remarks|truncatewords:20 }}
                         </div>
                       {% endif %}
@@ -173,19 +175,19 @@
           <!-- Submitted/Noted for this Section -->
           {% if card.submitted_count and card.submitted_count > 0 %}
             <div style="margin-bottom: 2rem;">
-              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+              <h3 class="section-title" style="font-size: 1rem;">
                 Submitted ({{ card.submitted_count }})
               </h3>
-              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div class="list-vstack">
                 {% for s in card.submitted %}
                   {% if s.status == 'noted' %}
-                    <div style="padding: 1rem; background: #ecfdf5; border: 1px solid #16a34a; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="item-card item-card--noted">
                       <div style="flex: 1;">
-                        <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; display:flex; align-items:center; gap:0.5rem;">
+                        <div class="item-title" style="display:flex; align-items:center; gap:0.5rem;">
                           {{ s.form_template.title }}
                           <span class="status-pill status-pill--{{ s.status }}">{{ s.get_status_display }}</span>
                         </div>
-                        <div style="font-size: 0.875rem; color: #6b7280;">
+                        <div class="item-meta">
                           {% if s.period %}{{ s.period.label }}{% endif %}
                           {% if s.submitted_at %}&middot; Submitted {{ s.submitted_at|date:"M d, Y" }}{% endif %}
                         </div>
@@ -200,17 +202,17 @@
                       </div>
                     </div>
                   {% else %}
-                    <div style="padding: 1rem; background: #fffbeb; border: 1px solid #f59e0b; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="item-card item-card--pending">
                       <div style="flex: 1;">
-                        <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.25rem; display:flex; align-items:center; gap:0.5rem;">
+                        <div class="item-title" style="display:flex; align-items:center; gap:0.5rem;">
                           {{ s.form_template.title }}
                           <span class="status-pill status-pill--{{ s.status }}">{{ s.get_status_display }}</span>
                         </div>
-                        <div style="font-size: 0.875rem; color: #6b7280;">
+                        <div class="item-meta">
                           {% if s.period %}{{ s.period.label }}{% endif %}
                           {% if s.submitted_at %}&middot; Submitted {{ s.submitted_at|date:"M d, Y" }}{% endif %}
                         </div>
-                        <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #92400e;">
+                        <div class="item-pending-note">
                           Awaiting review by {{ card.section.name }}.
                         </div>
                       </div>
@@ -227,26 +229,18 @@
           <!-- Available Forms for this Section -->
           {% if card.open_count > 0 %}
             <div>
-              <h3 style="font-size: 1rem; font-weight: 600; color: #1f2937; margin-bottom: 1rem;">
+              <h3 class="section-title" style="font-size: 1rem; margin-bottom: 1rem;">
                 Available Forms ({{ card.open_count }})
               </h3>
-              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+              <div class="forms-grid">
                 {% for form_info in card.available_forms %}
-                  <div style="padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 0.5rem;">
-                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 0.5rem;">
-                      {{ form_info.form_template.title }}
-                    </div>
-                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">
-                      Due: {{ form_info.deadline|date:"M d, Y" }}
-                    </div>
+                  <div class="form-card">
+                    <div class="form-card__title">{{ form_info.form_template.title }}</div>
+                    <div class="form-card__meta">Due: {{ form_info.deadline|date:"M d, Y" }}</div>
                     {% if form_info.period %}
-                      <a href="{% url 'start_submission' form_info.form_template.code form_info.period.id %}" class="btn btn--secondary btn--sm btn--block">
-                        Start Form
-                      </a>
+                      <a href="{% url 'start_submission' form_info.form_template.code form_info.period.id %}" class="btn btn--secondary btn--sm btn--block">Start Form</a>
                     {% else %}
-                      <span class="btn btn--secondary btn--sm btn--block" style="opacity: 0.5; cursor: not-allowed;">
-                        No Period Available
-                      </span>
+                      <span class="btn btn--secondary btn--sm btn--block" style="opacity: 0.5; cursor: not-allowed;">No Period Available</span>
                     {% endif %}
                   </div>
                 {% endfor %}
@@ -256,19 +250,23 @@
 
           <!-- Empty State -->
           {% if card.drafts_count == 0 and card.open_count == 0 %}
-            <div style="padding: 3rem; text-align: center; background: #f9fafb; border-radius: 0.5rem;">
-              <div style="font-weight: 600; color: #6b7280; margin-bottom: 0.25rem;">No forms available</div>
-              <div style="font-size: 0.875rem; color: #9ca3af;">
+            <div class="empty-pane">
+              <div class="empty-pane__title">No forms available</div>
+              <div class="empty-pane__subtitle">
                 There are currently no {{ card.section.code|upper }} forms to submit
               </div>
             </div>
           {% endif %}
 
+        
+
         </div>
       {% endfor %}
 
-    </section>
-    {% endif %}
+        </section>
+        {% endif %}
+      </main>
+    </div>
 
     <!-- JavaScript for Tab Switching -->
     <script>
@@ -282,48 +280,50 @@
         selectedSection.style.display = 'block';
       }
       
-      // Update tab active states
-      document.querySelectorAll('.section-tab').forEach(tab => {
-        tab.classList.remove('active');
-        // Update inline styles for active state
-        tab.style.color = '#6b7280';
-        tab.style.borderBottomColor = 'transparent';
-        tab.style.fontWeight = '500';
-      });
-      
-      // Add active class to clicked tab (ensure we select the button element, not the inner badge)
-      const btn = (evt && evt.currentTarget) ? evt.currentTarget : document.querySelector('.section-tab');
-      if (btn) {
-        btn.classList.add('active');
-        btn.style.color = '#2563eb';
-        btn.style.borderBottomColor = '#2563eb';
-        btn.style.fontWeight = '600';
+      // Update rail link active states (sidebar)
+      document.querySelectorAll('.rail-link').forEach(link => link.classList.remove('active'));
+      const linkBtn = (evt && evt.currentTarget) ? evt.currentTarget : document.querySelector('.rail-link');
+      if (linkBtn) {
+        linkBtn.classList.add('active');
+        linkBtn.setAttribute('aria-current', 'page');
       }
-      
-  // We no longer force badge colors; badge color reflects status.
       
       // Update URL without reload
       const url = new URL(window.location);
       url.searchParams.set('section', sectionCode);
       window.history.pushState({}, '', url);
+
+      // Persist section preference for quick return
+      try { localStorage.setItem('school_portal_section', sectionCode); } catch (e) {}
     }
 
     // Add hover effects
     document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('.section-tab').forEach(tab => {
-        tab.addEventListener('mouseenter', function() {
-          if (!this.classList.contains('active')) {
-            this.style.color = '#1f2937';
-            this.style.background = '#f9fafb';
-          }
-        });
-        tab.addEventListener('mouseleave', function() {
-          if (!this.classList.contains('active')) {
-            this.style.color = '#6b7280';
-            this.style.background = 'none';
+      // Keyboard navigation for sidebar rail
+      document.querySelectorAll('.rail-link').forEach((btn, idx, all) => {
+        btn.addEventListener('keydown', (e) => {
+          const prev = all[Math.max(0, idx - 1)];
+          const next = all[Math.min(all.length - 1, idx + 1)];
+          if (e.key === 'ArrowUp' && prev) { e.preventDefault(); prev.focus(); }
+          if (e.key === 'ArrowDown' && next) { e.preventDefault(); next.focus(); }
+          if ((e.key === 'Enter' || e.key === ' ') && btn.dataset.sectionCode) {
+            e.preventDefault();
+            selectSection(btn.dataset.sectionCode, { currentTarget: btn });
           }
         });
       });
+
+      // Restore last section if URL has none
+      const url = new URL(window.location);
+      if (!url.searchParams.get('section')) {
+        try {
+          const saved = localStorage.getItem('school_portal_section');
+          if (saved) {
+            const btn = document.querySelector(`.rail-link[data-section-code="${saved}"]`);
+            if (btn) { selectSection(saved, { currentTarget: btn }); }
+          }
+        } catch (e) {}
+      }
     });
     </script>
 

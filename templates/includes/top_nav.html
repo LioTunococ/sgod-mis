@@ -8,7 +8,9 @@
       {% if request.user.is_authenticated %}
         <div class="app-nav__links">
           {% if role_flags.is_school_head and current_school %}
-            <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'organizations:edit_my_school_profile' %}">School Profile</a>
+            {% if request.resolver_match and request.resolver_match.url_name != 'school_home' %}
+              <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'organizations:edit_my_school_profile' %}">School Profile</a>
+            {% endif %}
           {% endif %}
           {% if role_flags.is_section_admin or role_flags.is_psds or role_flags.is_sgod_admin %}
             <a class="btn btn--nav btn--sm app-nav__link" href="{% url 'district_submission_gaps' %}">Who Didn&apos;t Submit</a>

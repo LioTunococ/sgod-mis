@@ -106,6 +106,18 @@ def edit_my_school_profile(request):
         updated_profile = form.save(commit=False)
         updated_profile.school = school
         updated_profile.save()
+        # Optional: queue a confirmation email if notification_email provided
+        notif_email = updated_profile.notification_email
+        if notif_email:
+            try:  # pragma: no cover - side effect
+                from notifications.services import queue_email
+                queue_email(
+                    to_email=notif_email,
+                    subject="School Profile Updated",
+                    body="Your school profile information was successfully updated in the SGOD MIS system.",
+                )
+            except Exception:
+                pass  # Silently ignore notification failures to not block UX
         messages.success(request, "School profile updated.")
         return redirect("organizations:edit_my_school_profile")
 

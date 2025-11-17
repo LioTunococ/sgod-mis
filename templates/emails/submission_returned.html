@@ -1,0 +1,14 @@
+{% extends "emails/submission_base.html" %}
+{% block content %}
+<h2 style="margin-top:0;">Submission Returned for Revision</h2>
+<p class="meta">
+  <span class="badge">{{ status|title }}</span>
+</p>
+<p>
+  Your submission <strong>{{ title }}</strong> for <strong>{{ section }}</strong> ({{ period }}) was returned with remarks.
+</p>
+{% if remarks %}
+<p class="remarks"><strong>Remarks:</strong><br>{{ remarks }}</p>
+{% endif %}
+<p class="muted">Please log in to SGOD MIS to review and resubmit.</p>
+{% endblock %}

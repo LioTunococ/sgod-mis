@@ -67,6 +67,8 @@ class SchoolProfile(models.Model):
     )
     head_name = models.CharField(max_length=255, blank=True)
     head_contact = models.CharField(max_length=255, blank=True)
+    # Dedicated email address for system notifications
+    notification_email = models.EmailField(blank=True)
     grade_span_start = models.PositiveSmallIntegerField(null=True, blank=True)
     grade_span_end = models.PositiveSmallIntegerField(null=True, blank=True)
     strands = models.JSONField(default=list, blank=True)
