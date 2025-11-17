@@ -49,6 +49,24 @@ For local development you may swap backend:
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 ```
 
+### PythonAnywhere (HTTPS-friendly via Anymail)
+- Free accounts cannot use SMTP ports; prefer HTTPS API backends like SendGrid or Mailgun.
+- Install dependency (already in requirements): `django-anymail`.
+- Set environment variables on PythonAnywhere (Web → Environment Variables):
+    - SendGrid: `SENDGRID_API_KEY`
+    - Mailgun: `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`
+    - Optionally `DEFAULT_FROM_EMAIL` (e.g., `no-reply@yourdomain.example`)
+- The settings will auto-switch to the right Anymail backend when those vars are set.
+
+Verify delivery from server:
+```bash
+python manage.py send_test_email you@example.com
+```
+Then send queued app notifications:
+```bash
+python manage.py send_pending_notifications --retry-failed --limit 50
+```
+
 ### Usage Example (sending to a school's notification email)
 ```python
 from notifications.services import send_email_now

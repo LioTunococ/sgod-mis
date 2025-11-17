@@ -112,12 +112,38 @@ LOGOUT_REDIRECT_URL = 'login'
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 20000
 
 # --- Email / Notifications ---
-# Console backend by default (safe for dev); override in prod via env vars.
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+# Console backend by default (safe for dev). Override via env in prod.
+"""Email / Notifications configuration
+
+Priority (by environment):
+1) ANYMAIL_PROVIDER is set -> use Anymail HTTP API backend (PythonAnywhere-friendly)
+2) EMAIL_BACKEND is set -> honor explicitly
+3) Default to console backend for local dev
+"""
+
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
-# Optional SMTP settings (only used if EMAIL_BACKEND is an SMTP backend)
+# 1) Anymail (HTTP API; recommended for PythonAnywhere free)
+ANYMAIL_PROVIDER = os.getenv('ANYMAIL_PROVIDER', '').strip().lower()
+if ANYMAIL_PROVIDER:
+    EMAIL_BACKEND = f"anymail.backends.{ANYMAIL_PROVIDER}.EmailBackend"
+    # Populate common provider keys from env if present
+    ANYMAIL = {
+        # Mailgun
+        'MAILGUN_API_KEY': os.getenv('MAILGUN_API_KEY', ''),
+        'MAILGUN_SENDER_DOMAIN': os.getenv('MAILGUN_SENDER_DOMAIN', ''),
+        # SendGrid
+        'SENDGRID_API_KEY': os.getenv('SENDGRID_API_KEY', ''),
+        # Mailjet
+        'MAILJET_API_KEY': os.getenv('MAILJET_API_KEY', ''),
+        'MAILJET_SECRET_KEY': os.getenv('MAILJET_SECRET_KEY', ''),
+    }
+else:
+    # 2) Respect explicit EMAIL_BACKEND if provided; else default to console
+    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+
+# Optional SMTP settings (used when EMAIL_BACKEND is SMTP)
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587')) if os.getenv('EMAIL_HOST') else 587
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
@@ -126,4 +152,21 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1').lower() in {'1','true','yes','on
 EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', '0').lower() in {'1','true','yes','on'}
 if EMAIL_USE_SSL:
     EMAIL_USE_TLS = False  # mutually exclusive
+
+# Optional: Anymail (SendGrid/Mailgun/etc.) for HTTPS email delivery (PythonAnywhere-friendly)
+ANYMAIL = {}
+sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
+mailgun_api_key = os.getenv('MAILGUN_API_KEY')
+mailgun_domain = os.getenv('MAILGUN_DOMAIN')
+if sendgrid_api_key:
+    EMAIL_BACKEND = 'anymail.backends.sendgrid.EmailBackend'
+    ANYMAIL = {
+        'SENDGRID_API_KEY': sendgrid_api_key,
+    }
+elif mailgun_api_key and mailgun_domain:
+    EMAIL_BACKEND = 'anymail.backends.mailgun.EmailBackend'
+    ANYMAIL = {
+        'MAILGUN_API_KEY': mailgun_api_key,
+        'MAILGUN_SENDER_DOMAIN': mailgun_domain,
+    }
 
