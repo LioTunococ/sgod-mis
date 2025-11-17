@@ -124,7 +124,7 @@ Priority (by environment):
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
-// 1) Anymail (HTTP API; recommended for PythonAnywhere free)
+# 1) Anymail (HTTP API; recommended for PythonAnywhere free)
 ANYMAIL_PROVIDER = os.getenv('ANYMAIL_PROVIDER', '').strip().lower()
 if ANYMAIL_PROVIDER:
     EMAIL_BACKEND = f"anymail.backends.{ANYMAIL_PROVIDER}.EmailBackend"
