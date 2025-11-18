@@ -207,16 +207,7 @@
                             {% for activity_form in formset_data.formset %}
                               {{ activity_form.id }}
                               <tr class="activity-repeated-header" data-activity-index="{{ forloop.counter0 }}" data-expanded="true">
-                                <td class="col-activity" colspan="8">
-                                  <span class="acc-icon" aria-hidden="true">▾</span>
-                                  <span class="activity-header-title">
-                                    Activity {{ forloop.counter }}:
-                                    <span class="activity-title-text">{{ activity_form.activity.value|default_if_none:'' }}</span>
-                                  </span>
-                                </td>
-                              </tr>
-                              <tr class="activity-table-headers" data-activity-index="{{ forloop.counter0 }}">
-                                <td class="col-activity">Activity</td>
+                                <td class="col-activity"><strong><span class="acc-icon" aria-hidden="true">▾</span> Activity <span class="section-number">{{ forloop.counter }}</span></strong></td>
                                 <td class="col-output">Output<br><small class="text-muted">Target</small></td>
                                 <td class="col-output">Output<br><small class="text-muted">Actual</small></td>
                                 <td class="col-timeframe">Timeframe<br><small class="text-muted">Target</small></td>
