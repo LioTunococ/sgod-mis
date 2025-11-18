@@ -571,6 +571,47 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (e) {}
   }
 
+  // ---------------- SHS strand hiding (from dataset) ----------------
+  function recalcGradeCompletionFor(gradeAccordion){
+    if (!gradeAccordion) return;
+    const container = gradeAccordion.querySelector('.subjects-container');
+    if (!container) return;
+    const rows = Array.from(container.querySelectorAll('.subject-accordion')).filter(el => el.style.display !== 'none');
+    const offered = rows.filter(row => (row.getAttribute('data-offered') || 'true') !== 'false');
+    const total = offered.length;
+    let completed = 0;
+    offered.forEach(row => { const isComplete = !!row.querySelector('.status-badge.complete'); if (isComplete) completed += 1; });
+    const pct = total ? Math.round((completed / total) * 100) : 0;
+    const stats = gradeAccordion.querySelector('.grade-stats');
+    if (stats){
+      const countEl = stats.querySelector('.subjects-count'); if (countEl) countEl.textContent = `${completed}/${total} subjects`;
+      const bar = stats.querySelector('.completion-fill'); if (bar) bar.style.width = pct + '%';
+      const pctEl = stats.querySelector('.completion-percentage'); if (pctEl) pctEl.textContent = pct + '%';
+    }
+  }
+
+  function applyUnselectedStrandHidingFromDataset(){
+    const form = byId('submission-form');
+    if (!form) return;
+    let unselected = [];
+    try {
+      const raw = form.dataset.shsUnselected || '[]';
+      unselected = JSON.parse(raw);
+    } catch (e) { unselected = []; }
+    if (!Array.isArray(unselected) || unselected.length === 0) return;
+    document.querySelectorAll('.grade-accordion').forEach(ga => {
+      const gradeLabel = ga.getAttribute('data-grade');
+      if (gradeLabel !== 'Grade 11' && gradeLabel !== 'Grade 12') return;
+      const container = ga.querySelector('.subjects-container'); if (!container) return;
+      container.querySelectorAll('.subject-accordion').forEach(acc => {
+        const key = acc.getAttribute('data-subject-key') || '';
+        const matches = unselected.some(pref => pref && key.indexOf(pref) === 0);
+        if (matches) acc.style.display = 'none';
+      });
+      recalcGradeCompletionFor(ga);
+    });
+  }
+
   function initializeSLPOfferedToggle() {
     // Work directly with sections rendered by the template
     document.querySelectorAll('.card-section.proficiency-section').forEach(section => {
@@ -1204,6 +1245,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSLPOfferedToggle();
   initializeSLPCompetenciesAndReasons();
     initializeSLPNestedAccordion();
+    // Hide SHS unselected strands (from School Profile) if provided via dataset
+    applyUnselectedStrandHidingFromDataset();
     initializeReadingDifficulties();
     initializeRMADifficulties();
     wireSLPSaveSubject();

@@ -64,42 +64,7 @@
         </ul>
       {% endif %}
 
-        <script>
-  // RMA mismatch highlighting only (no global banner)
-        (function(){
-          function recalcRMA(){
-            var anyMismatch = false;
-            var rows = document.querySelectorAll('.rma-row');
-            rows.forEach(function(tr){
-              var idx = tr.getAttribute('data-rma-index');
-              if(idx === null) return;
-              function field(name){ return tr.querySelector('input[name="rma_rows-'+idx+'-'+name+'"]'); }
-              var enrolEl = field('enrolment');
-              if(!enrolEl) return;
-              var buckets = ['emerging_not_proficient','emerging_low_proficient','developing_nearly_proficient','transitioning_proficient','at_grade_level'];
-              var total = 0;
-              buckets.forEach(function(b){ var el = field(b); total += parseInt(el && el.value || '0',10); });
-              var enrol = parseInt(enrolEl.value||'0',10);
-              // No auto-fill for RMA; keep mismatch visual only
-              // Mismatch visual (add red outline to row)
-              if(total !== enrol){
-                anyMismatch = true;
-                tr.classList.add('rma-mismatch');
-              } else {
-                tr.classList.remove('rma-mismatch');
-              }
-            });
-            // No global banner
-          }
-          document.addEventListener('input', function(e){
-            if(e.target && /rma_rows-\d+-(enrolment|emerging_not_proficient|emerging_low_proficient|developing_nearly_proficient|transitioning_proficient|at_grade_level)/.test(e.target.name||'')){
-              recalcRMA();
-            }
-          });
-          document.addEventListener('DOMContentLoaded', recalcRMA);
-          window.recalcRMA = recalcRMA;
-        })();
-        </script>
+        
       <!-- Submission Status Card -->
       <div class="submission-status-card">
         <div class="submission-status">
@@ -138,6 +103,7 @@
             data-expected-timings='{{ expected_timings_json|safe }}'
             data-can-edit="{% if can_edit %}1{% else %}0{% endif %}"
     data-status="{{ submission.status }}"
+        data-shs-unselected='{{ shs_unselected_prefixes_json|escapejs }}'
             data-tab-order='{{ tabs_json|safe }}'>
         {% csrf_token %}
   {# Global validation banner removed per request; per-section inline errors only #}
@@ -476,84 +442,7 @@
         {% load submission_tags %}
         {{ slp_formset.management_form }}
 
-        <script>
-        // Client-side SLP proficiency sum = enrolment validation
-        (function(){
-          function cardElements(){
-            return document.querySelectorAll('.proficiency-section');
-          }
-          function checkSLPRows(){
-            var anyMismatch = false;
-            cardElements().forEach(function(section){
-              var idx = section.getAttribute('data-form-index');
-              if(idx === null) return;
-              var enrolEl = section.querySelector('input[name="slp_rows-'+idx+'-enrolment"]');
-              if(!enrolEl) return;
-              var total = 0;
-              ['dnme','fs','s','vs','o'].forEach(function(f){
-                var el = section.querySelector('input[name="slp_rows-'+idx+'-'+f+'"]');
-                total += parseInt(el && el.value || '0',10);
-              });
-              var enrol = parseInt(enrolEl.value||'0',10);
-              // Build human-readable grade label for error messages
-              var gradeLabel = 'This subject';
-              try {
-                var labelEl = section.closest('.subject-content').querySelector('.subject-label');
-                if(labelEl){
-                  var txt = labelEl.textContent || '';
-                  var match = txt.match(/Grade\s+\d+/i);
-                  if(match) gradeLabel = match[0];
-                }
-              } catch(e) {}
-              // Prepare validation container
-              var errorsBox = section.querySelector('.validation-errors');
-              if(errorsBox){
-                errorsBox.style.display = 'none';
-                errorsBox.querySelector('.error-messages').innerHTML = '';
-              }
-              var badge = section.querySelector('.slp-mismatch-badge');
-              // Mismatch conditions: (a) enrolment entered and != total, or (b) enrolment is zero while counts provided
-              var mismatch = false;
-              var messages = [];
-              if(enrol > 0 && total !== enrol){
-                mismatch = true;
-                messages.push(gradeLabel + ' proficiency bands total ('+total+') must equal enrollment ('+enrol+')');
-              } else if(enrol === 0 && total > 0){
-                mismatch = true;
-                messages.push(gradeLabel + ' has proficiency counts ('+total+') but enrollment is 0 — enter correct enrollment.');
-              }
-              if(mismatch){
-                anyMismatch = true;
-                section.classList.add('slp-mismatch');
-                if(badge){
-                  badge.style.display='inline-block';
-                  badge.textContent='Mismatch';
-                }
-                if(errorsBox){
-                  errorsBox.style.display = 'flex';
-                  var list = errorsBox.querySelector('.error-messages');
-                  messages.forEach(function(msg){
-                    var p = document.createElement('div');
-                    p.textContent = msg;
-                    list.appendChild(p);
-                  });
-                }
-              } else {
-                section.classList.remove('slp-mismatch');
-                if(badge){ badge.style.display='none'; }
-              }
-            });
-            // Global banner removed; mismatches handled inline per section
-          }
-          document.addEventListener('input', function(e){
-            if(e.target && /slp_rows-\d+-(enrolment|dnme|fs|s|vs|o)/.test(e.target.name||'')){
-              checkSLPRows();
-            }
-          });
-          document.addEventListener('DOMContentLoaded', checkSLPRows);
-          window.checkSLPRows = checkSLPRows;
-        })();
-        </script>
+        
 
         <div class="section-card">
           <div class="section-card__header">School Level of Proficiency (SLOP) Analysis</div>
@@ -1606,65 +1495,7 @@
     <!-- Form navigation and validation script -->
     <script src="{% static 'js/submission-form.js' %}"></script>
 
-    <!-- SLP: Automatic hiding of unselected SHS specializations (client-side) -->
-    <script>
-      (function(){
-        // Parse JSON from context for SHS unselected strand prefixes
-        var SHS_UNSELECTED_PREFIXES = [];
-        try {
-          SHS_UNSELECTED_PREFIXES = JSON.parse('{{ shs_unselected_prefixes_json|escapejs }}');
-        } catch (e) {}
-        function applyUnselectedStrandHiding(){
-          var unselected = Array.isArray(SHS_UNSELECTED_PREFIXES) ? SHS_UNSELECTED_PREFIXES : [];
-          if (!unselected.length) return;
-          // Only for Grade 11/12 containers
-          var gradeAccordions = document.querySelectorAll('.grade-accordion');
-          gradeAccordions.forEach(function(ga){
-            var gradeLabel = ga.getAttribute('data-grade');
-            if (gradeLabel !== 'Grade 11' && gradeLabel !== 'Grade 12') return;
-            var container = ga.querySelector('.subjects-container');
-            if (!container) return;
-            container.querySelectorAll('.subject-accordion').forEach(function(acc){
-              var key = acc.getAttribute('data-subject-key') || '';
-              var matches = unselected.some(function(pref){ return pref && key.indexOf(pref) === 0; });
-              if (matches){
-                acc.style.display = 'none';
-              }
-            });
-            recalcGradeCompletionFor(ga);
-          });
-        }
-        function recalcGradeCompletionFor(gradeAccordion){
-          if (!gradeAccordion) return;
-          var container = gradeAccordion.querySelector('.subjects-container');
-          if (!container) return;
-          var rows = Array.prototype.slice.call(container.querySelectorAll('.subject-accordion'))
-            .filter(function(el){ return el.style.display !== 'none'; });
-          // Only count offered subjects in totals and completion
-          var offered = rows.filter(function(row){ return (row.getAttribute('data-offered') || 'true') !== 'false'; });
-          var total = offered.length;
-          var completed = 0;
-          offered.forEach(function(row){
-            var isComplete = !!row.querySelector('.status-badge.complete');
-            if (isComplete) completed += 1;
-          });
-          var pct = total ? Math.round((completed / total) * 100) : 0;
-          var stats = gradeAccordion.querySelector('.grade-stats');
-          if (stats){
-            var countEl = stats.querySelector('.subjects-count');
-            if (countEl) countEl.textContent = completed + '/' + total + ' subjects';
-            var bar = stats.querySelector('.completion-fill');
-            if (bar) bar.style.width = pct + '%';
-            var pctEl = stats.querySelector('.completion-percentage');
-            if (pctEl) pctEl.textContent = pct + '%';
-          }
-        }
-        document.addEventListener('DOMContentLoaded', function(){
-          // Hide subjects belonging to SHS strands not selected in School Profile
-          applyUnselectedStrandHiding();
-        });
-      })();
-    </script>
+    
 
     <!-- SLP Tests disabled for production -->
     {% comment %}
