@@ -103,7 +103,7 @@
             data-expected-timings='{{ expected_timings_json|safe }}'
             data-can-edit="{% if can_edit %}1{% else %}0{% endif %}"
     data-status="{{ submission.status }}"
-        data-shs-unselected='{{ shs_unselected_prefixes_json|escapejs }}'
+            data-shs-unselected='{{ shs_unselected_prefixes_json|safe }}'
             data-tab-order='{{ tabs_json|safe }}'>
         {% csrf_token %}
   {# Global validation banner removed per request; per-section inline errors only #}

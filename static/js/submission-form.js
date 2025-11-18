@@ -1134,30 +1134,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // Disable all form inputs, textareas, and selects that aren't already handled by template
     const formElements = form.querySelectorAll('input:not([type="hidden"]):not([readonly]):not([disabled]), textarea:not([readonly]):not([disabled]), select:not([disabled])');
     formElements.forEach(element => {
-      if (element.type === 'submit' || element.type === 'button') {
+      const tag = element.tagName.toLowerCase();
+      const type = (element.type || '').toLowerCase();
+      if (type === 'submit' || type === 'button') {
         element.disabled = true;
-      } else if (element.type === 'checkbox' || element.type === 'radio') {
+        return;
+      }
+      if (type === 'checkbox' || type === 'radio') {
         element.disabled = true;
         element.style.cursor = 'not-allowed';
-      } else {
-        // Use readonly for text inputs and textareas to preserve values during form submission
-        if (element.tagName.toLowerCase() === 'input' && 
-            ['text', 'email', 'number', 'date', 'datetime-local', 'time'].includes(element.type)) {
-          element.readOnly = true;
-          element.style.backgroundColor = '#f3f4f6';
-          element.style.cursor = 'not-allowed';
-          element.style.border = '1px solid #d1d5db';
-        } else if (element.tagName.toLowerCase() === 'textarea') {
-          element.readOnly = true;
-          element.style.backgroundColor = '#f3f4f6';
-          element.style.cursor = 'not-allowed';
-          element.style.border = '1px solid #d1d5db';
-        } else {
-          element.disabled = true;
-          element.style.backgroundColor = '#f3f4f6';
-          element.style.cursor = 'not-allowed';
-        }
+        return;
       }
+      // For number/date inputs, disable to block spinner arrows; others use readOnly
+      const shouldDisable = (tag === 'select') || (tag === 'input' && ['number','date','datetime-local','time'].includes(type));
+      if (shouldDisable) {
+        element.disabled = true;
+      } else if (tag === 'input' || tag === 'textarea') {
+        element.readOnly = true;
+      } else {
+        element.disabled = true;
+      }
+      // Apply consistent read-only styles
+      element.style.backgroundColor = '#f3f4f6';
+      element.style.cursor = 'not-allowed';
+      if (tag === 'input' || tag === 'textarea') element.style.border = '1px solid #d1d5db';
+      // Prevent focus via keyboard
+      element.setAttribute('tabindex', '-1');
     });
     
     // Disable all buttons except navigation buttons
