@@ -63,7 +63,7 @@
           <p><strong>School:</strong> {{ submission.school.name }}</p>
           <p><strong>Section:</strong> {{ submission.form_template.section.name }}</p>
           {% if school_profile %}
-            <p><strong>School Head:</strong> {{ school_profile.head_name|default:"Not set" }}</p>
+            <p><strong>Prepared by:</strong> {{ signatories.prepared_by|default:school_profile.head_name|default:'-' }}</p>
             <p><strong>Contact:</strong> {{ school_profile.head_contact|default:"Not provided" }}</p>
             {% if school_profile_strands %}
               <p><strong>Strands / Programs:</strong> {{ school_profile_strands }}</p>
@@ -578,9 +578,9 @@
           <p class="muted">No instructional supervision entries submitted.</p>
         {% endif %}
 
-        {% if signatories %}
+        {% if signatories or school_profile %}
           <h4 class="review-subheading">Signatories</h4>
-          <p><strong>School Head:</strong> {{ signatories.prepared_by|default:'-' }}</p>
+          <p><strong>Prepared by:</strong> {{ signatories.prepared_by|default:school_profile.head_name|default:'-' }}</p>
         {% endif %}
       </div>
 

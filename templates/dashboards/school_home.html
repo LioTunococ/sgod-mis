@@ -343,34 +343,7 @@
     {% endif %}
     {% endif %}  {# Close the {% if false %} #}
 
-    <!-- Action Items (Outstanding Returns) -->
-    {% if school_portal.outstanding_returns %}
-      <section class="card">
-        <h2>Outstanding Returns</h2>
-        <ul class="portal-list portal-list--stacked">
-          {% for submission in school_portal.outstanding_returns %}
-            <li class="portal-list__item">
-              <div>
-                <div class="portal-list__title">{{ submission.form_template.title }}</div>
-                <div class="portal-list__meta">
-                  <span class="status-pill status-pill--{{ submission.status }}">{{ submission.get_status_display }}</span>
-                  {% if submission.period %}
-                    &nbsp;&middot;&nbsp;{{ submission.period.label }}
-                  {% endif %}
-                  &nbsp;&middot;&nbsp;Updated {{ submission.updated_at|date:"M j, Y g:i a" }}
-                </div>
-                {% if submission.returned_remarks %}
-                  <p class="portal-list__remarks">{{ submission.returned_remarks|linebreaksbr }}</p>
-                {% endif %}
-              </div>
-              <div class="portal-list__actions">
-                <a class="btn btn--secondary btn--sm" href="{% url 'edit_submission' submission.id %}">Review &amp; resubmit</a>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      </section>
-    {% endif %}
+    {# Removed redundant Outstanding Returns section (was duplicated with In Progress/Returned draft display) #}
 
     <!-- Reviewer Tools (if applicable) -->
     {% if show_reviewer_dashboards %}

@@ -2094,9 +2094,88 @@ def review_detail(request, submission_id, submission_obj=None):
     projects = list(submission.smea_projects.all())
     attachments = list(submission.attachments.all())
     school_profile = getattr(submission.school, "profile", None)
-    school_profile_strands = ", ".join(school_profile.strands) if getattr(school_profile, "strands", None) else ""
+    # --- Clean & normalize SHS strands for display (avoid serialized noise) ---
+    def _clean_strands(raw):
+        if not raw:
+            return []
+        valid_codes = {c for (c, _l, _p) in smea_constants.SHS_STRANDS}
+        label_for_code = {c: l for (c, l, _p) in smea_constants.SHS_STRANDS}
+        # Accept either codes or labels; ignore malformed entries containing excessive quoting/brackets
+        cleaned_codes = []
+        for item in raw:
+            if not item:
+                continue
+            s = str(item).strip()
+            if any(ch in s for ch in ['\\\\\\\\', '[', ']', '""', "']"]):
+                # Skip obviously corrupted serialized artifacts
+                continue
+            lower = s.lower()
+            if lower in valid_codes:
+                cleaned_codes.append(lower)
+            else:
+                # Match by label (case-insensitive)
+                for code, label in label_for_code.items():
+                    if lower == label.lower():
+                        cleaned_codes.append(code)
+                        break
+        # De-duplicate preserving original order
+        seen = set()
+        ordered = []
+        for code in cleaned_codes:
+            if code not in seen:
+                seen.add(code)
+                ordered.append(code)
+        return [label_for_code[c] for c in ordered]
+    raw_strands = getattr(school_profile, 'strands', None) if school_profile else None
+    school_profile_strands_list = _clean_strands(raw_strands)
+    school_profile_strands = ", ".join(school_profile_strands_list)
 
     slp_rows = list(ordered_slp_rows(submission))
+    # Contextualize SLP: limit to school's grade span and SHS-offered specializations
+    try:
+        allowed_grades = set(grade_numbers_for_school(submission.school))
+    except Exception:
+        allowed_grades = None
+    # Build SHS strand prefix allow-list if the school has declared strands
+    try:
+        profile = getattr(submission.school, "profile", None)
+        raw_strands = set(getattr(profile, "strands", []) or [])
+        code_to_prefix = {c: p for (c, _l, p) in smea_constants.SHS_STRANDS}
+        label_to_code = {l: c for (c, l, _p) in smea_constants.SHS_STRANDS}
+        selected_codes = set()
+        for item in raw_strands:
+            if item in code_to_prefix:
+                selected_codes.add(item)
+            elif item in label_to_code:
+                selected_codes.add(label_to_code[item])
+        allowed_prefixes = {code_to_prefix[c] for c in selected_codes if c in code_to_prefix}
+        all_spec_prefixes = tuple(p for (_c, _l, p) in smea_constants.SHS_STRANDS)
+    except Exception:
+        allowed_prefixes = set()
+        all_spec_prefixes = tuple()
+
+    def _gnum(label: str):
+        return smea_constants.GRADE_LABEL_TO_NUMBER.get(label)
+
+    def _is_specialized(code: str) -> bool:
+        sc = (code or '').strip()
+        return any(sc.startswith(p) for p in all_spec_prefixes)
+
+    filtered_slp_rows = []
+    for r in slp_rows:
+        # Respect offered flag
+        if hasattr(r, 'is_offered') and not r.is_offered:
+            continue
+        gnum = _gnum(r.grade_label)
+        if allowed_grades is not None and gnum is not None and gnum not in allowed_grades:
+            continue
+        # If the school declared SHS strands, restrict specialized G11/G12 subjects to those strands only
+        if gnum in (11, 12) and _is_specialized(r.subject) and allowed_prefixes:
+            if not any((r.subject or '').startswith(p) for p in allowed_prefixes):
+                continue
+        filtered_slp_rows.append(r)
+
+    slp_rows = filtered_slp_rows
     slp_dnme_summary = build_slp_dnme_summary(slp_rows)
     slp_outstanding_summary = build_slp_outstanding_summary(slp_rows)
     slp_dnme_recommendations = build_slp_dnme_recommendations(slp_rows)
@@ -2116,7 +2195,21 @@ def review_detail(request, submission_id, submission_obj=None):
     matrix_philiri_entries = list(submission.philiri_assessments.all())
     matrix_reading_interventions = list(submission.reading_interventions_new.all())
 
-    rma_rows = list(submission.form1_rma_rows.all())
+    # --- Contextual RMA rows: restrict to school's grade span & ordered lowest→highest ---
+    rma_rows_all = list(submission.form1_rma_rows.all())
+    try:
+        allowed_grade_numbers = set(grade_numbers_for_school(submission.school))
+    except Exception:
+        allowed_grade_numbers = None
+    rma_code_to_num = {"k": 0, "g1": 1, "g2": 2, "g3": 3, "g4": 4, "g5": 5, "g6": 6, "g7": 7, "g8": 8, "g9": 9, "g10": 10}
+    def _include_rma_row(row):
+        num = rma_code_to_num.get(row.grade_label)
+        if num is None:
+            return False
+        if allowed_grade_numbers is not None and num not in allowed_grade_numbers:
+            return False
+        return True
+    rma_rows = sorted([r for r in rma_rows_all if _include_rma_row(r)], key=lambda r: rma_code_to_num.get(r.grade_label, 999))
     rma_interventions = list(submission.form1_rma_interventions.all())
     supervision_rows = list(submission.form1_supervision_rows.all())
     adm_rows = list(submission.form1_adm_rows.all())
@@ -2196,6 +2289,42 @@ def review_submission_tabs(request, submission_id):
     pct_rows = list(pct_header.rows.all()) if pct_header else []
 
     slp_rows = list(ordered_slp_rows(submission))
+    # Contextualize SLP similarly in tabs view
+    try:
+        allowed_grades = set(grade_numbers_for_school(submission.school))
+    except Exception:
+        allowed_grades = None
+    try:
+        profile = getattr(submission.school, 'profile', None)
+        raw_strands = set(getattr(profile, 'strands', []) or [])
+        code_to_prefix = {c: p for (c, _l, p) in smea_constants.SHS_STRANDS}
+        label_to_code = {l: c for (c, l, _p) in smea_constants.SHS_STRANDS}
+        selected_codes = set()
+        for item in raw_strands:
+            if item in code_to_prefix:
+                selected_codes.add(item)
+            elif item in label_to_code:
+                selected_codes.add(label_to_code[item])
+        allowed_prefixes = {code_to_prefix[c] for c in selected_codes if c in code_to_prefix}
+        all_spec_prefixes = tuple(p for (_c, _l, p) in smea_constants.SHS_STRANDS)
+    except Exception:
+        allowed_prefixes = set()
+        all_spec_prefixes = tuple()
+
+    def _gnum2(label: str):
+        return smea_constants.GRADE_LABEL_TO_NUMBER.get(label)
+
+    def _is_spec2(code: str) -> bool:
+        sc = (code or '').strip()
+        return any(sc.startswith(p) for p in all_spec_prefixes)
+
+    slp_rows = [
+        r for r in slp_rows
+        if (not hasattr(r, 'is_offered') or r.is_offered)
+        and (allowed_grades is None or (_gnum2(r.grade_label) is None or _gnum2(r.grade_label) in allowed_grades))
+        and (not (_gnum2(r.grade_label) in (11, 12) and _is_spec2(r.subject) and allowed_prefixes and not any((r.subject or '').startswith(p) for p in allowed_prefixes)))
+    ]
+
     slp_dnme_summary = build_slp_dnme_summary(slp_rows)
     slp_outstanding_summary = build_slp_outstanding_summary(slp_rows)
     slp_dnme_recommendations = build_slp_dnme_recommendations(slp_rows)
@@ -2207,9 +2336,49 @@ def review_submission_tabs(request, submission_id):
     reading_philiri = list(submission.form1_philiri.all())
     reading_interventions = list(submission.form1_reading_interventions.all())
     school_profile = getattr(submission.school, "profile", None)
-    school_profile_strands = ", ".join(school_profile.strands) if getattr(school_profile, "strands", None) else ""
+    # Clean strands again for tabs view
+    def _clean_strands_tabs(raw):
+        if not raw:
+            return []
+        valid_codes = {c for (c, _l, _p) in smea_constants.SHS_STRANDS}
+        label_for_code = {c: l for (c, l, _p) in smea_constants.SHS_STRANDS}
+        cleaned_codes = []
+        for item in raw:
+            if not item:
+                continue
+            s = str(item).strip()
+            if any(ch in s for ch in ['\\\\\\\\', '[', ']', '""', "']"]):
+                continue
+            lower = s.lower()
+            if lower in valid_codes:
+                cleaned_codes.append(lower)
+            else:
+                for code, label in label_for_code.items():
+                    if lower == label.lower():
+                        cleaned_codes.append(code)
+                        break
+        seen = set(); ordered=[]
+        for code in cleaned_codes:
+            if code not in seen:
+                seen.add(code); ordered.append(code)
+        return ", ".join(label_for_code[c] for c in ordered)
+    school_profile_strands = _clean_strands_tabs(getattr(school_profile, 'strands', None))
 
-    rma_rows = list(submission.form1_rma_rows.all())
+    # Contextual + ordered RMA rows for tabs view
+    rma_rows_all = list(submission.form1_rma_rows.all())
+    try:
+        allowed_grade_numbers = set(grade_numbers_for_school(submission.school))
+    except Exception:
+        allowed_grade_numbers = None
+    rma_code_to_num = {"k": 0, "g1": 1, "g2": 2, "g3": 3, "g4": 4, "g5": 5, "g6": 6, "g7": 7, "g8": 8, "g9": 9, "g10": 10}
+    def _include_rma_row(row):
+        num = rma_code_to_num.get(row.grade_label)
+        if num is None:
+            return False
+        if allowed_grade_numbers is not None and num not in allowed_grade_numbers:
+            return False
+        return True
+    rma_rows = sorted([r for r in rma_rows_all if _include_rma_row(r)], key=lambda r: rma_code_to_num.get(r.grade_label, 999))
     rma_interventions = list(submission.form1_rma_interventions.all())
 
     supervision_rows = list(submission.form1_supervision_rows.all())

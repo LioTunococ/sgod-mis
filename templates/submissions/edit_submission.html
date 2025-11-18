@@ -14,6 +14,30 @@
       /* SLP duplicate proficiency banner suppression */
       .subject-content > .validation-errors { display:none !important; }
       .proficiency-section .validation-errors { display:none; /* JS will toggle to flex when needed */ }
+      /* Global read-only hover cue across the entire form when editing is disabled */
+      form[data-can-edit="0"] input,
+      form[data-can-edit="0"] textarea,
+      form[data-can-edit="0"] select,
+      form[data-can-edit="0"] button,
+      form[data-can-edit="0"] label,
+      form[data-can-edit="0"] .btn {
+        cursor: not-allowed !important;
+      }
+      /* Greyed-out visual treatment when the submission is not editable */
+      form[data-can-edit="0"] input:not([type="hidden"]),
+      form[data-can-edit="0"] textarea,
+      form[data-can-edit="0"] select {
+        background-color: #f3f4f6 !important; /* gray-100 */
+        color: #6b7280 !important;            /* gray-500 */
+        border-color: #d1d5db !important;     /* gray-300 */
+      }
+      form[data-can-edit="0"] .card,
+      form[data-can-edit="0"] .section-card {
+        background-color: #f9fafb;            /* gray-50 */
+      }
+      form[data-can-edit="0"] .btn {
+        opacity: 0.5;
+      }
     </style>
   </head>
   <body class="container submission-page">
@@ -1538,8 +1562,14 @@
           {% endif %}
 
           <div class="form-field">
-            <!-- Removed label as requested -->
-            {{ signatories_form.prepared_by }}
+            <label>Prepared by:</label>
+            {% if can_edit %}
+              {{ signatories_form.prepared_by }}
+            {% else %}
+              <div style="background-color:#f3f4f6; border:1px solid #d1d5db; padding:.6rem .75rem; cursor:not-allowed;">
+                {{ signatories_form.prepared_by.value|default:school_profile.head_name|default:'-' }}
+              </div>
+            {% endif %}
             {% if signatories_form.prepared_by.errors %}
               <div class="form-error">
                 {{ signatories_form.prepared_by.errors|join:", " }}
