@@ -1,6 +1,9 @@
 from __future__ import annotations
 import datetime
 import json
+import time
+import logging
+from django.db import connection
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -67,6 +70,7 @@ from .forms import (
     ReadingAssessmentPHILIRIFormSet,
     ReadingInterventionNewFormSet,
 )
+logger = logging.getLogger(__name__)
 from .models import (
     Form1ADMHeader,
     Form1ADMRow,
@@ -329,9 +333,43 @@ def ensure_slp_rows(submission: Submission, grade_subject_pairs: list[tuple[str,
                 o=0,
                 is_offered=True,
             )
-    for row in Form1SLPRow.objects.filter(submission=submission):
-        if (row.grade_label, row.subject) not in pairs_set:
-            row.delete()
+    # Protective deletion logic: only remove extraneous rows that are truly empty.
+    # A row is considered "empty" if it has zero enrolment & proficiency counts,
+    # no narrative/intervention fields, no non-mastery metadata, and no analysis record.
+    # This prevents accidental loss of user-entered data if grade/subject mappings change.
+    deleted_ids: list[int] = []
+    skipped_ids: list[int] = []
+    try:
+        for row in Form1SLPRow.objects.filter(submission=submission).select_related("analysis"):
+            pair = (row.grade_label, row.subject)
+            if pair in pairs_set:
+                continue
+            has_counts = any((row.enrolment or 0, row.dnme or 0, row.fs or 0, row.s or 0, row.vs or 0, row.o or 0))
+            has_narrative = bool((row.top_three_llc or '').strip()) or bool((row.intervention_plan or '').strip())
+            has_nm = bool((row.non_mastery_reasons or '').strip()) or bool((row.non_mastery_other or '').strip())
+            has_analysis = getattr(row, 'analysis', None) is not None and any(
+                (getattr(row.analysis, f) or '').strip() for f in (
+                    'dnme_factors','fs_factors','s_practices','vs_practices','o_practices','overall_strategy'
+                )
+            )
+            if not (has_counts or has_narrative or has_nm or has_analysis):
+                deleted_ids.append(row.id)
+                row.delete()
+            else:
+                skipped_ids.append(row.id)
+        if deleted_ids or skipped_ids:
+            try:
+                logger.info(
+                    "[SLP][ensure] extraneous rows processed submission=%d deleted=%d skipped=%d deleted_ids=%s skipped_ids=%s",
+                    submission.id, len(deleted_ids), len(skipped_ids), deleted_ids, skipped_ids
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            logger.warning("[SLP][ensure] error during protective deletion submission=%d error=%s", submission.id, e)
+        except Exception:
+            pass
 
 
 def _apply_shs_strand_defaults(submission: Submission) -> None:
@@ -1327,14 +1365,14 @@ def edit_submission(request, submission_id, submission_obj=None):
                     pct_formset.save()
                     success = True
             elif current_tab == "slp" and action == "save_subject":
+                # Optimized fast-path: manual parse + selective queryset update, minimal validation.
+                t0 = time.perf_counter()
                 next_tab = "slp"
                 subject_row = None
-                subject_form = None
-                slp_rows_list = list(slp_formset.queryset)
                 idx_value = None
                 if current_subject_id:
-                    subject_row = Form1SLPRow.objects.filter(submission=submission, pk=current_subject_id).first()
-                if current_subject_index:
+                    subject_row = Form1SLPRow.objects.select_related("analysis").filter(submission=submission, pk=current_subject_id).first()
+                if subject_row is None and current_subject_index:
                     try:
                         idx_value = int(current_subject_index)
                     except (TypeError, ValueError):
@@ -1344,84 +1382,143 @@ def edit_submission(request, submission_id, submission_obj=None):
                         idx_value = int(current_subject_prefix.split('-')[1])
                     except (IndexError, ValueError):
                         idx_value = None
-                if subject_row is None and idx_value is not None and 0 <= idx_value < len(slp_rows_list):
-                    subject_row = slp_rows_list[idx_value]
-                if subject_row:
-                    prefix = current_subject_prefix or f"slp_rows-{idx_value if idx_value is not None else 0}"
-                    subject_form = Form1SLPRowForm(
-                        data=request.POST,
-                        instance=subject_row,
-                        prefix=prefix,
-                    )
-                    if subject_form.is_valid():
-                        # Enforce enrolment equality rule only on explicit draft save / submit (not autosave)
-                        if not is_autosave and action in {"save_draft", "submit_submission", "save_subject"}:
-                            cd = subject_form.cleaned_data
-                            if cd.get("is_offered", True):
-                                enrol = cd.get("enrolment") or 0
-                                total = sum([
-                                    cd.get("dnme") or 0,
-                                    cd.get("fs") or 0,
-                                    cd.get("s") or 0,
-                                    cd.get("vs") or 0,
-                                    cd.get("o") or 0,
-                                ])
-                                if enrol and total != enrol:
-                                    subject_form.add_error(None, f"Sum of proficiency counts ({total}) must equal enrolment ({enrol}) for {subject_form.instance.grade_label} - {subject_form.instance.get_subject_display()}.")
-                        if subject_form.errors:
-                            success = False
-                            for errs in subject_form.errors.values():
-                                for e in errs:
-                                    messages.error(request, e)
-                        else:
-                            saved_row = subject_form.save()
-                            # Persist non-mastery reasons & other (already handled in form.save but ensure post-processing if needed)
-                            try:
-                                nm_codes = request.POST.get(f'{prefix}-non_mastery_reasons', '')
-                                nm_other = request.POST.get(f'{prefix}-non_mastery_other', '')
-                                if nm_codes is not None:
-                                    saved_row.non_mastery_reasons = nm_codes
-                                if nm_other is not None:
-                                    saved_row.non_mastery_other = nm_other
-                                saved_row.save(update_fields=['non_mastery_reasons','non_mastery_other'])
-                            except Exception:
-                                pass
-                            if idx_value is None:
-                                try:
-                                    idx_value = int(prefix.split('-')[1])
-                                except (IndexError, ValueError):
-                                    idx_value = None
-                            if idx_value is not None:
-                                dnme_factors = request.POST.get(f'slp_analysis_{idx_value}_dnme_factors', '')
-                                fs_factors = request.POST.get(f'slp_analysis_{idx_value}_fs_factors', '')
-                                s_practices = request.POST.get(f'slp_analysis_{idx_value}_s_practices', '')
-                                vs_practices = request.POST.get(f'slp_analysis_{idx_value}_vs_practices', '')
-                                o_practices = request.POST.get(f'slp_analysis_{idx_value}_o_practices', '')
-                                overall_strategy = request.POST.get(f'slp_analysis_{idx_value}_overall_strategy', '')
-                                Form1SLPAnalysis.objects.update_or_create(
-                                    slp_row=saved_row,
-                                    defaults={
-                                        'dnme_factors': dnme_factors,
-                                        'fs_factors': fs_factors,
-                                        's_practices': s_practices,
-                                        'vs_practices': vs_practices,
-                                        'o_practices': o_practices,
-                                        'overall_strategy': overall_strategy,
-                                    },
-                                )
-                            success = True
-                            if not is_autosave:
-                                messages.success(
-                                    request,
-                                    f"Saved {saved_row.grade_label} - {saved_row.get_subject_display()}",
-                                )
-                    else:
-                        success = False
-                        for errors in subject_form.errors.values():
-                            for error in errors:
-                                messages.error(request, error)
-                else:
+                if subject_row is None and idx_value is not None:
+                    rows = list(Form1SLPRow.objects.filter(submission=submission).order_by('id'))
+                    if 0 <= idx_value < len(rows):
+                        subject_row = rows[idx_value]
+                if not subject_row:
                     messages.error(request, "Unable to determine which subject to save.")
+                else:
+                    # Snapshot BEFORE state for all rows (diagnostic only)
+                    pre_rows_snapshot = []
+                    try:
+                        pre_rows_snapshot = list(Form1SLPRow.objects.filter(submission=submission).values(
+                            'id','grade_label','subject','enrolment','dnme','fs','s','vs','o','is_offered',
+                            'top_three_llc','intervention_plan','non_mastery_reasons','non_mastery_other'
+                        ))
+                    except Exception:
+                        pre_rows_snapshot = []
+                    prefix = current_subject_prefix or f"slp_rows-{idx_value if idx_value is not None else 0}"
+                    # Server safeguard: ensure prefix matches the actual index of the target row; if mismatch, abort update.
+                    if idx_value is not None and not prefix.endswith(str(idx_value)):
+                        logger.warning("[SLP][fast-path] prefix/index mismatch; refusing to update row=%d prefix=%s idx=%s", subject_row.id, prefix, idx_value)
+                        messages.error(request, "Subject prefix mismatch; changes not applied.")
+                        prefix_mismatch = True
+                    else:
+                        prefix_mismatch = False
+                    post = request.POST
+                    # Parse numeric proficiency + enrolment
+                    try:
+                        dnme_v = int(post.get(f"{prefix}-dnme") or 0)
+                        fs_v = int(post.get(f"{prefix}-fs") or 0)
+                        s_v = int(post.get(f"{prefix}-s") or 0)
+                        vs_v = int(post.get(f"{prefix}-vs") or 0)
+                        o_v = int(post.get(f"{prefix}-o") or 0)
+                    except (TypeError, ValueError):
+                        dnme_v = fs_v = s_v = vs_v = o_v = 0
+                    enrol_raw = post.get(f"{prefix}-enrolment")
+                    try:
+                        enrol_v = int(enrol_raw) if enrol_raw not in {None, '', '0'} else 0
+                    except (TypeError, ValueError):
+                        enrol_v = 0
+                    prof_sum = dnme_v + fs_v + s_v + vs_v + o_v
+                    if enrol_v == 0 and prof_sum > 0:
+                        enrol_v = prof_sum
+                    elif prof_sum > enrol_v and enrol_v > 0:
+                        enrol_v = prof_sum
+                    # Basic integrity: do not allow proficiency sum > enrolment on offered subject (after auto-adjust this should hold)
+                    is_offered_flag = post.get(f"{prefix}-is_offered")
+                    is_offered_v = bool(is_offered_flag) if is_offered_flag is not None else subject_row.is_offered
+                    try:
+                        logger.info(
+                            "[SLP][fast-path] is_offered evaluation row=%d prefix=%s posted=%s resulting=%s existing=%s",
+                            subject_row.id, prefix, is_offered_flag, is_offered_v, subject_row.is_offered
+                        )
+                    except Exception:
+                        pass
+                    # Collate changed fields
+                    changed = {}
+                    if subject_row.enrolment != enrol_v: changed['enrolment'] = enrol_v
+                    if subject_row.dnme != dnme_v: changed['dnme'] = dnme_v
+                    if subject_row.fs != fs_v: changed['fs'] = fs_v
+                    if subject_row.s != s_v: changed['s'] = s_v
+                    if subject_row.vs != vs_v: changed['vs'] = vs_v
+                    if subject_row.o != o_v: changed['o'] = o_v
+                    if subject_row.is_offered != is_offered_v: changed['is_offered'] = is_offered_v
+                    top_llc = post.get(f"{prefix}-top_three_llc")
+                    if top_llc is not None and top_llc.strip() != '' and top_llc != (subject_row.top_three_llc or ''):
+                        changed['top_three_llc'] = top_llc
+                    interv_plan = post.get(f"{prefix}-intervention_plan")
+                    if interv_plan is not None and interv_plan.strip() != '' and interv_plan != (subject_row.intervention_plan or ''):
+                        changed['intervention_plan'] = interv_plan
+                    nm_codes_key = f"{prefix}-non_mastery_reasons"
+                    nm_other_key = f"{prefix}-non_mastery_other"
+                    if nm_codes_key in post:
+                        val = post.get(nm_codes_key, '')
+                        if val != (subject_row.non_mastery_reasons or ''):
+                            changed['non_mastery_reasons'] = val
+                    if nm_other_key in post:
+                        val = post.get(nm_other_key, '')
+                        if val != (subject_row.non_mastery_other or ''):
+                            changed['non_mastery_other'] = val
+                    if changed:
+                        if not prefix_mismatch:
+                            Form1SLPRow.objects.filter(pk=subject_row.pk).update(**changed)
+                            for k, v in changed.items(): setattr(subject_row, k, v)
+                        else:
+                            changed.clear()
+                    # Analysis (only if any analysis fields posted)
+                    if idx_value is None:
+                        try:
+                            idx_value = int(prefix.split('-')[1])
+                        except (IndexError, ValueError):
+                            idx_value = None
+                    if idx_value is not None:
+                        analysis_defaults = {
+                            'dnme_factors': post.get(f'slp_analysis_{idx_value}_dnme_factors', ''),
+                            'fs_factors': post.get(f'slp_analysis_{idx_value}_fs_factors', ''),
+                            's_practices': post.get(f'slp_analysis_{idx_value}_s_practices', ''),
+                            'vs_practices': post.get(f'slp_analysis_{idx_value}_vs_practices', ''),
+                            'o_practices': post.get(f'slp_analysis_{idx_value}_o_practices', ''),
+                            'overall_strategy': post.get(f'slp_analysis_{idx_value}_overall_strategy', ''),
+                        }
+                        if any(v.strip() for v in analysis_defaults.values()):
+                            Form1SLPAnalysis.objects.update_or_create(slp_row=subject_row, defaults=analysis_defaults)
+                    success = True
+                    t1 = time.perf_counter()
+                    # Snapshot AFTER and compute unintended changes to other rows
+                    try:
+                        post_rows_snapshot = list(Form1SLPRow.objects.filter(submission=submission).values(
+                            'id','grade_label','subject','enrolment','dnme','fs','s','vs','o','is_offered',
+                            'top_three_llc','intervention_plan','non_mastery_reasons','non_mastery_other'
+                        ))
+                        by_id_pre = {r['id']: r for r in pre_rows_snapshot}
+                        unintended = []
+                        for r in post_rows_snapshot:
+                            if r['id'] == subject_row.id:
+                                continue
+                            pre = by_id_pre.get(r['id'])
+                            if not pre:
+                                continue
+                            # Detect any diff in non-target row
+                            diff_fields = [f for f in r.keys() if f != 'id' and pre.get(f) != r.get(f)]
+                            if diff_fields:
+                                unintended.append({'id': r['id'], 'fields': diff_fields})
+                        if unintended:
+                            logger.warning(
+                                "[SLP][fast-path] unintended cross-row modifications submission=%d target_row=%d unintended=%s",
+                                submission.id, subject_row.id, unintended
+                            )
+                    except Exception:
+                        pass
+                    try:
+                        logger.info(
+                            "[PERF][SLP] save_subject fast-path: %.2f ms queries=%d changed=%d", (t1 - t0) * 1000, len(connection.queries), len(changed)
+                        )
+                    except Exception:
+                        pass
+                    if not is_autosave:
+                        messages.success(request, f"Saved {subject_row.grade_label} - {subject_row.get_subject_display()}")
             
             elif current_tab == "slp":
                 # Validate core SLP rows; top lists are optional (not rendered in current UI)

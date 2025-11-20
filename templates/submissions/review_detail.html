@@ -212,8 +212,9 @@
                   <th class="slp-col-metric">S</th>
                   <th class="slp-col-metric">VS</th>
                   <th class="slp-col-metric">O</th>
-                  <th class="slp-col-llc">Top 3 LLC</th>
-                  <th class="slp-col-intervention">Intervention Plan</th>
+                    <th class="slp-col-llc">LLC (Not Mastered)</th>
+                    <th class="slp-col-reasons">Reasons (Non‑Mastery)</th>
+                    <th class="slp-col-remediation">Remediation</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,8 +229,29 @@
                     <td class="slp-col-metric">{% if row.is_offered %}{{ row.s|default:'-' }}{% else %}-{% endif %}</td>
                     <td class="slp-col-metric">{% if row.is_offered %}{{ row.vs|default:'-' }}{% else %}-{% endif %}</td>
                     <td class="slp-col-metric">{% if row.is_offered %}{{ row.o|default:'-' }}{% else %}-{% endif %}</td>
-                    <td class="slp-col-llc">{{ row.top_three_llc|linebreaksbr|default:'-' }}</td>
-                    <td class="slp-col-intervention">{{ row.intervention_plan|linebreaksbr|default:'-' }}</td>
+                      <td class="slp-col-llc">{% if row.is_offered %}
+                        {% with items=row.top_three_llc|llc_to_list %}
+                          {% if items %}
+                            <ol class="llc-list">
+                              {% for it in items %}<li>{{ it }}</li>{% endfor %}
+                            </ol>
+                          {% else %}-{% endif %}
+                        {% endwith %}
+                      {% else %}-{% endif %}</td>
+                      <td class="slp-col-reasons">{% if row.is_offered %}
+                        {% with labels=row.non_mastery_reasons|non_mastery_reasons_list %}
+                          {% if labels %}
+                            <div class="chips">
+                              {% for label in labels %}<span class="chip chip--reason">{{ label }}</span>{% endfor %}
+                            </div>
+                          {% endif %}
+                        {% endwith %}
+                        {% if row.non_mastery_other %}
+                          <div class="muted small" style="margin-top:.25rem;">Other: {{ row.non_mastery_other }}</div>
+                        {% endif %}
+                        {% if not row.non_mastery_reasons and not row.non_mastery_other %}-{% endif %}
+                      {% else %}-{% endif %}</td>
+                      <td class="slp-col-remediation">{% if row.is_offered %}<div class="remediation-text">{{ row.intervention_plan|linebreaksbr|default:'-' }}</div>{% else %}-{% endif %}</td>
                   </tr>
                 {% endfor %}
               </tbody>

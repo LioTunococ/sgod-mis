@@ -52,7 +52,7 @@
 
 .review-page .slp-col-llc,
 .review-page .slp-col-intervention {
-  /* Share most of the width so long text fits */
+  /* Legacy selector kept for backward compatibility */
   width: 26%;
   min-width: 220px;
   overflow-wrap: anywhere;
@@ -60,12 +60,32 @@
   white-space: pre-wrap;
 }
 
+/* New SLP columns */
+.review-page .slp-col-reasons { width: 18%; min-width: 200px; }
+.review-page .slp-col-remediation { width: 24%; min-width: 240px; }
+.review-page .slp-col-llc { width: 22%; min-width: 220px; }
+
 /* Tighten numeric column widths for a better fit */
 .review-page .slp-col-grade { width: 6%; min-width: 70px; }
 .review-page .slp-col-subject { width: 12%; min-width: 130px; }
 .review-page .slp-col-offered { width: 5%; min-width: 64px; text-align: center; }
 .review-page .slp-col-enrolment { width: 7%; min-width: 90px; text-align: right; }
 .review-page .slp-col-metric { width: 3.5%; min-width: 56px; text-align: right; }
+
+/* Prevent over-wrapping in headers; we shortened labels already */
+.review-page .table thead th { white-space: nowrap; }
+
+/* Chips for reasons */
+.review-page .chips { display: flex; flex-wrap: wrap; gap: .25rem; }
+.review-page .chip { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .78rem; line-height: 1.15; background:#eef2ff; color:#1f2937; border:1px solid #c7d2fe; }
+.review-page .chip--reason { background:#ecfeff; border-color:#a5f3fc; color:#0f172a; }
+
+/* LLC list polish */
+.review-page .llc-list { margin: 0; padding-left: 1.1rem; }
+.review-page .llc-list li { margin: 0; }
+
+/* Remediation readability */
+.review-page .remediation-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Smooth horizontal scroll feedback for long tables */
 .review-page .table-scroll::-webkit-scrollbar { height: 10px; }

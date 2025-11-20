@@ -10,827 +10,144 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 {% endif %}
-
-<style>
-    :root {
-        --bg: #f5f7fb;
-        --panel: #ffffff;
-        --text: #1f2937;
-        --muted: #6b7280;
-        --border: #e5e7eb;
-        --primary: #4f46e5;
-        --primary-600: #4338ca;
-        --primary-50: #eef2ff;
-        --accent: #06b6d4;
-        --success: #10b981;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-        --radius: 10px;
-        --shadow: 0 8px 20px rgba(17, 24, 39, 0.08);
-    }
-
-    body { background: var(--bg); }
-
-    /* Clean Dashboard Styling */
-    .dashboard-container {
-        padding: 1.25rem 1.5rem 2rem;
-        max-width: 100%;
-        margin: 0 auto;
-    }
-
-    .filters-section {
-        background: var(--panel);
-        border-radius: var(--radius);
-        padding: 1.25rem 1.25rem 1rem;
-        margin-bottom: 2rem;
-        box-shadow: var(--shadow);
-        position: relative;
-        border: 1px solid var(--border);
-        overflow: hidden; /* ensure accent bar never overlays content column */
-    }
-    /* Sidebar + sticky behavior moved to the sidebar container */
-    .sticky-filters { position: static; max-height: none; overflow: visible; backdrop-filter: none; }
-    .kpi-sidebar { position: sticky; top: 64px; height: calc(100vh - 84px); overflow: auto; z-index: 1; }
-    .kpi-content { position: relative; z-index: 2; }
-    .filters-section { width:100%; box-sizing: border-box; }
-    /* Two-column layout: sticky sidebar with filters */
-    .kpi-layout { display:grid; grid-template-columns: minmax(220px,260px) minmax(0,1fr); gap: 1.5rem; align-items:start; }
-    .kpi-sidebar { align-self:start; }
-    .kpi-content { min-width:0; position:relative; z-index:2; }
-    @media (max-width: 1024px) { .kpi-layout { grid-template-columns: 1fr; } }
-    /* Thin gradient accent on the left for a cooler card feel */
-    .filters-section::before {
-        content: "";
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 4px;
-        border-radius: var(--radius) 0 0 var(--radius);
-        background: linear-gradient(180deg, var(--primary), var(--accent));
-    }
-    /* Elevate when stuck (applied to sidebar in practice) */
-    .kpi-sidebar.is-stuck .filters-section { box-shadow: 0 10px 22px rgba(17,24,39,.10); border-color:#dbeafe; }
-    .kpi-sidebar.is-stuck .filters-section::before { background: linear-gradient(180deg, var(--accent), var(--primary)); }
-
-    .filter-grid {
-        display: grid;
-    /* Container-aware by default so it adapts inside the sidebar */
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.75rem 1rem;
-        align-items: end;
-    }
-    /* Viewport breakpoints kept for wide main-content cases, but sidebar overrides below */
-    @media (min-width: 1440px) { .filter-grid { grid-template-columns: repeat(4, minmax(220px, 1fr)); } }
-    @media (max-width: 1200px) { .filter-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
-    @media (max-width: 720px) { .filter-grid { grid-template-columns: 1fr; } }
-
-    .form-group {
-        display: flex;
-        flex-direction: column;
-    }
-
-    .form-group label { font-weight: 700; margin-bottom: 0.4rem; color: #111827; }
-    .form-group label { text-transform: none; letter-spacing: .01em; font-size:.9rem; }
-    .form-group select {
-        appearance: none;
-        padding: .55rem .85rem;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        font-size: .92rem;
-        background: #fff url('data:image/svg+xml;utf8,<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M6 8l4 4 4-4" stroke="%236b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>') no-repeat right .6rem center/16px 16px;
-        color: var(--text);
-        transition: box-shadow .15s ease, border-color .15s ease;
-    }
-    .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
-
-    /* Lightweight layout helpers for filters */
-    .form-row--2 { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: end; }
-    .form-row--full { grid-column: 1 / -1; }
-    .filters-divider { grid-column: 1 / -1; height: 1px; background: var(--border); margin: .25rem 0 .5rem; }
-
-    /* Lightweight sub-section label inside filters */
-    .subtle-heading {
-        grid-column: 1 / -1;
-        font-size: .9rem;
-        font-weight: 700;
-        color: #374151;
-        letter-spacing: .02em;
-        margin-top: .25rem;
-        margin-bottom: .25rem;
-        opacity: .85;
-    }
-
-    .btn-primary {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%);
-        color: white;
-        padding: 0.55rem 1rem;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-
-    .btn-primary:hover { filter: brightness(1.05); }
-
-    /* Shared button refinements */
-    .btn { transition: transform .06s ease, box-shadow .2s ease; }
-    .btn:hover { transform: translateY(-1px); }
-    .btn:active { transform: translateY(0); }
-
-    /* Badge normalization */
-    .badge { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .5rem; border-radius:999px; font-size:.75rem; font-weight:700; line-height:1; }
-
-    /* KPI Table Styling */
-    .kpi-table-section {
-        background: var(--panel);
-        border-radius: var(--radius);
-        padding: 1.25rem;
-        box-shadow: var(--shadow);
-        overflow-x: auto;
-    }
-
-    .kpi-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-    }
-
-    .kpi-table th {
-        background: #f8fafc;
-        padding: 0.75rem;
-        text-align: left;
-        font-weight: 600;
-        border-bottom: 2px solid var(--border);
-        white-space: nowrap;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        box-shadow: 0 2px 6px rgba(17, 24, 39, 0.06);
-        background-image: radial-gradient(ellipse at bottom, rgba(79,70,229,.06), rgba(79,70,229,0) 70%);
-    }
-
-    .kpi-table td {
-        padding: 0.75rem;
-        border-bottom: 1px solid var(--border);
-        vertical-align: middle; /* keep rows visually balanced */
-    }
-    .kpi-table td.num { font-variant-numeric: tabular-nums; }
-
-    /* Sticky first column for readability */
-    .kpi-table th:first-child, .kpi-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 3; }
-    .kpi-table th:first-child { box-shadow: 1px 0 0 rgba(229,231,235,.9); }
-
-    /* Align numeric KPI columns to center */
-    .kpi-table th:nth-child(n+4), .kpi-table td:nth-child(n+4) { text-align: center; }
-
-    .kpi-table tbody tr:nth-child(even) {
-        background: #f9fbff;
-    }
-
-    .kpi-table tr:hover {
-        background: #f9fafb;
-        box-shadow: inset 4px 0 0 0 rgba(79,70,229,.25);
-    }
-
-    /* Scrollbar polish where supported */
-    .kpi-table-section::-webkit-scrollbar,
-    .sticky-filters::-webkit-scrollbar { height: 10px; width: 10px; }
-    .kpi-table-section::-webkit-scrollbar-thumb,
-    .sticky-filters::-webkit-scrollbar-thumb { background:#c7d2fe; border-radius:999px; }
-    .kpi-table-section::-webkit-scrollbar-track,
-    .sticky-filters::-webkit-scrollbar-track { background:#eef2ff; border-radius:999px; }
-
-    /* Bar Graph Cells */
-    .kpi-bar-cell {
-        position: relative;
-        background: #f1f5f9;
-        border-radius: 8px;
-        width: 120px;      /* unify KPI bar column width */
-        min-width: 120px;
-        height: 1.875rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        color: #111827;
-    }
-
-    .kpi-bar-fill {
-        position: absolute;
-        top: 0;
-        left: 0;
-        height: 100%;
-        border-radius: 8px;
-        transition: width .25s ease;
-    }
-
-    .kpi-bar-text {
-        position: relative;
-        z-index: 1;
-        font-size: 0.82rem;
-        font-weight: 600;
-    }
-
-    /* Performance-based color schemes */
-    .kpi-bar-fill.performance-low { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
-    .kpi-bar-fill.performance-medium { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
-    .kpi-bar-fill.performance-high { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
-    
-    /* Fallback KPI type colors */
-    .kpi-implementation { background: linear-gradient(90deg, #34d399 0%, #10b981 100%); }
-    .kpi-slp { background: linear-gradient(90deg, #60a5fa 0%, #3b82f6 100%); }
-    .kpi-reading { background: linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%); }
-    /* Contextual SLP band colors */
-    .kpi-slp-dnme { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
-    .kpi-slp-fs   { background: linear-gradient(90deg, #f97316 0%, #ea580c 100%); }
-    .kpi-slp-s    { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
-    .kpi-slp-vs   { background: linear-gradient(90deg, #84cc16 0%, #65a30d 100%); }
-    .kpi-slp-o    { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
-    /* Contextual RMA band colors */
-    .kpi-rma-not    { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
-    .kpi-rma-low    { background: linear-gradient(90deg, #f97316 0%, #ea580c 100%); }
-    .kpi-rma-nearly { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); }
-    .kpi-rma-prof   { background: linear-gradient(90deg, #84cc16 0%, #65a30d 100%); }
-    .kpi-rma-agl    { background: linear-gradient(90deg, #10b981 0%, #059669 100%); }
-    .kpi-rma { background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%); }
-    .kpi-supervision { background: linear-gradient(90deg, #f87171 0%, #ef4444 100%); }
-    .kpi-adm { background: linear-gradient(90deg, #22d3ee 0%, #06b6d4 100%); }
-
-    /* No data styling */
-    .no-data {
-        color: #6b7280;
-        font-style: italic;
-    }
-
-    .school-name {
-        font-weight: 600;
-        color: #1f2937;
-    }
-
-    .district-name {
-        color: #6b7280;
-        font-size: 0.9rem;
-    }
-
-    /* Summary section */
-    .summary-section {
-        background: var(--panel);
-        border-radius: var(--radius);
-        padding: 1.25rem;
-        margin-bottom: 2rem;
-        box-shadow: var(--shadow);
-    }
-
-    .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-    }
-
-    .summary-card { text-align:center; padding:1rem; background:#f8fafc; border-radius:12px; border:1px solid var(--border); }
-
-    .summary-card h3 {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #1f2937;
-        margin: 0;
-    }
-
-    .summary-card p {
-        color: #6b7280;
-        margin: 0.5rem 0 0 0;
-        font-size: 0.9rem;
-    }
-
-    /* Inline legend (lightweight) */
-    .legend-inline { display:flex; flex-wrap:wrap; gap:.5rem .75rem; align-items:center; color:#6b7280; font-size:.85rem; margin:.25rem 0 .5rem; }
-    .legend-inline .sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.35rem; }
-    .legend-inline .sw.high { background:#10b981; }
-    .legend-inline .sw.med { background:#f59e0b; }
-    .legend-inline .sw.low { background:#ef4444; }
-
-    /* Quick search match highlight */
-    mark.q { background:#fef08a; color:#1f2937; padding:0 .1em; border-radius:2px; }
-
-    /* Enhanced Visual Components */
-    .visual-section {
-        background: var(--panel);
-        border-radius: var(--radius);
-        padding: 1.25rem;
-        margin-bottom: 2rem;
-        box-shadow: var(--shadow);
-    }
-
-    .chart-container {
-        position: relative;
-        width: 100%;
-        max-width: 600px;
-        margin: 0 auto;
-        height: 400px;
-    }
-
-    .chart-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-        gap: 2rem;
-        margin-bottom: 2rem;
-    }
-
-    .chart-card { background: var(--panel); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
-
-    .chart-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 1rem;
-        text-align: center;
-    }
-
-    .summary-stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-bottom: 2rem;
-    }
-
-    .stat-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        text-align: center;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    }
-
-    .stat-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-
-    .stat-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-
-    /* Enhanced performance indicators */
-    .performance-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .performance-icon {
-        font-size: 1.2rem;
-    }
-
-    /* Animated progress bars */
-    .animated-progress {
-        background: #e5e7eb;
-        border-radius: 4px;
-        overflow: hidden;
-        height: 8px;
-        margin: 0.5rem 0;
-    }
-
-    .animated-progress-bar {
-        height: 100%;
-        background: linear-gradient(90deg, #10b981, #34d399);
-        transition: width 1s ease-in-out;
-        border-radius: 4px;
-    }
-
-    /* Group header styling (district grouping) */
-    .group-header td {
-        background: #f3f4f6;
-        font-weight: 700;
-        color: #374151;
-        padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid var(--border);
-        position: sticky;
-        top: 36px; /* stay below the header row */
-        z-index: 1;
-    }
-
-    /* Shimmer skeleton for AJAX loading */
-    .skeleton { padding: 1rem; }
-    .skeleton .shimmer-block {
-        height: 14px;
-        border-radius: 8px;
-        background: linear-gradient(90deg, #eef2ff 0%, #f5f7fb 40%, #eef2ff 80%);
-        background-size: 200% 100%;
-        animation: shimmer 1.4s ease infinite;
-        margin: 10px 0;
-    }
-    .skeleton .shimmer-header { height: 18px; width: 40%; }
-    .skeleton .shimmer-wide { height: 12px; width: 100%; }
-    .skeleton .row-group { display:grid; grid-template-columns: 260px 1fr 120px 120px 120px; gap: 12px; align-items:center; }
-    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    /* Quick search input enhancement */
-    .input--search {
-        background: #fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%236b7280" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"/></svg>') no-repeat 8px center/18px 18px;
-        padding-left: 34px !important;
-        transition: box-shadow .15s ease, border-color .15s ease;
-    }
-    .input--search:focus { outline:none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
-
-    /* Filters toggle */
-    .filters-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 0.75rem;
-        gap: .5rem;
-        flex-wrap: wrap;
-    }
-    .btn-toggle { display: none; }
-    .btn-sm { padding:.4rem .75rem; font-size:.9rem; }
-
-    /* Buttons (lightweight enhancement) */
-    .btn.btn--primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%); color:#fff; border:none; }
-    .btn.btn--primary:hover { filter: brightness(1.05); }
-    .btn.btn--secondary { background:#fff; border:1px solid var(--border); color:#1f2937; }
-    .btn.btn--secondary:hover { background:#f9fafb; }
-
-    /* Toolbar select (for filter column layout) */
-    .toolbar-select { padding:.35rem .6rem; border:1px solid var(--border); border-radius:8px; background:#fff; color:#374151; font-weight:600; }
-    .toolbar-select:focus { outline:none; box-shadow: 0 0 0 3px rgba(79,70,229,.15); border-color:#c7d2fe; }
-
-    /* Manual column overrides */
-    .filter-grid.cols-1 { grid-template-columns: 1fr !important; }
-    .filter-grid.cols-2 { grid-template-columns: repeat(2, minmax(220px,1fr)) !important; }
-    .filter-grid.cols-3 { grid-template-columns: repeat(3, minmax(220px,1fr)) !important; }
-    .filter-grid.cols-4 { grid-template-columns: repeat(4, minmax(220px,1fr)) !important; }
-
-    /* Ensure the sidebar version never squishes: default to single-column there.
-       Place after the generic rules so it wins by specificity and order. */
-    .kpi-sidebar .filter-grid { grid-template-columns: 1fr !important; grid-auto-flow: row; }
-    /* When set to 1 column, force each direct child to span full width */
-    .kpi-sidebar .filter-grid.cols-1 > * { grid-column: 1 / -1; }
-    /* Also treat the default (no explicit cols-*) as single-column */
-    .kpi-sidebar .filter-grid:not(.cols-2):not(.cols-3):not(.cols-4) > * { grid-column: 1 / -1; }
-    .kpi-sidebar .filter-grid > * { min-width: 0; }
-    .kpi-sidebar .filter-grid.cols-2 { grid-template-columns: repeat(2, minmax(220px,1fr)) !important; }
-    .kpi-sidebar .filter-grid.cols-3 { grid-template-columns: repeat(3, minmax(220px,1fr)) !important; }
-    .kpi-sidebar .filter-grid.cols-4 { grid-template-columns: repeat(4, minmax(220px,1fr)) !important; }
-
-    /* Switches */
-    .switch {
-        display: inline-flex; align-items: center; gap:.4rem; font-weight:600; color:#374151;
-    }
-    .switch input { width: 38px; height: 20px; appearance: none; background:#e5e7eb; border-radius:999px; position:relative; outline:none; cursor:pointer; transition:background .2s; }
-    .switch input:checked { background:#4f46e5; }
-    .switch input::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:left .2s; }
-    .switch input:checked::after { left:20px; }
-
-    /* Pill toggle (fallback-friendly) for toolbar switches */
-    .toggle-pill { position: relative; display:inline-flex; align-items:center; }
-    .toggle-pill input { position:absolute; opacity:0; pointer-events:none; }
-    .toggle-pill span { display:inline-block; padding:.35rem .7rem; border-radius:999px; border:1px solid var(--border); background:#fff; color:#374151; font-weight:600; }
-    .toggle-pill input:checked + span { background: var(--primary-50); color:#3730a3; border-color:#c7d2fe; }
-
-    /* Cards view */
-    .cards-controls { display:flex; gap:1rem; align-items:center; }
-    .cards-grid { display:none; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:1rem; }
-    .cards-grid.active { display:grid; }
-    .kpi-card { background:#ffffff; border:1px solid var(--border); border-radius:12px; padding:1rem; box-shadow: var(--shadow); }
-    .kpi-card h4 { margin:.25rem 0; font-size:1rem; color:#111827; }
-    .kpi-card .meta { color:#6b7280; font-size:.85rem; margin-bottom:.5rem; }
-    .kpi { display:flex; justify-content:space-between; align-items:center; margin:.35rem 0; font-weight:600; }
-    .kpi .bar { flex:1; height:8px; background:#e5e7eb; border-radius:999px; margin:0 .5rem; overflow:hidden; }
-    .kpi .bar span { display:block; height:100%; background:#3b82f6; }
-
-    /* KPI Part pill tabs */
-    .pill-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .5rem;
-        margin: .5rem 0 0.75rem 0;
-        position: static; /* avoid clashing with sticky filters */
-        background: #fff;
-        padding-bottom: .5rem;
-        border-bottom: 1px solid #e5e7eb;
-    }
-    .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .4rem .85rem;
-        border-radius: 999px;
-        background: #f3f4f6;
-        color: #374151;
-        border: 1px solid #e5e7eb;
-        cursor: pointer;
-        user-select: none;
-        font-weight: 600;
-        transition: all .15s ease;
-    }
-    .pill:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(17,24,39,.08); }
-    .pill.active { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-600) 100%); color:#fff; border-color: transparent; }
-    .pill:focus { outline: none; box-shadow: 0 0 0 3px rgba(79,70,229,.25); }
-
-    /* Sorted column highlight */
-    .kpi-table th.sorted-col { background: #eef2ff; color:#1f2937; }
-    .kpi-table td.sorted-col { background: #f7f8ff; }
-
-    /* Density toggle: compact mode */
-    body.density-compact .kpi-table th { padding: .5rem .5rem; }
-    body.density-compact .kpi-table td { padding: .45rem .5rem; }
-    body.density-compact .filter-grid { gap: .5rem .75rem; }
-
-    /* Filter chips summary */
-    .chips { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
-    .chip { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; padding:.25rem .5rem; border-radius:999px; font-size:.8rem; }
-    .chip .x { margin-left:.25rem; opacity:.7; }
-
-    /* Sortable headers */
-    th.sortable { cursor: pointer; }
-    th.sortable .sort-indicator { margin-left:.35rem; font-size:.8rem; opacity:.7; }
-
-    /* Mobile: focus on key columns */
-    @media (max-width: 900px) {
-        .kpi-table th:nth-child(n+4), .kpi-table td:nth-child(n+4) { display: none; }
-        .kpi-table th:nth-child(1), .kpi-table td:nth-child(1) { min-width:180px; }
-        .kpi-table th:nth-child(2), .kpi-table td:nth-child(2) { min-width:120px; }
-        .kpi-table th:nth-child(3), .kpi-table td:nth-child(3) { min-width:90px; }
-    }
-
-    /* Density: single comfortable mode (compact removed per feedback) */
-</style>
+<link rel="stylesheet" href="{% static 'css/dashboard/smme_kpi_dashboard.css' %}">
 {% endblock %}
 
 {% block content %}
-{% include "includes/top_nav.html" %}
-
-<div class="dashboard-container">
-    <div class="page-heading">
-        <h1>SMME KPI Dashboard</h1>
-        <p class="subtitle">Simple table view with bar graph cells showing KPI performance across all sections</p>
-        {% if debug_perf %}
-        <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
-            <span style="background:#eef2ff; color:#3730a3; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.85rem;">DEBUG</span>
-            <span style="color:#6b7280; font-size:0.9rem;">{{ debug_perf.query_count }} queries • {{ debug_perf.execution_time }}s</span>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Two‑pane layout: sidebar filters + content -->
-    <div class="kpi-layout">
-    <aside class="kpi-sidebar">
-    <div class="filters-section sticky-filters" id="filtersPanel">
-            <div class="filters-toolbar">
-                <h2 style="margin: 0; color: #1f2937;">Filters</h2>
+<div class="dashboard-container kpi-layout">
+    <!-- Sidebar Filters -->
+    <div class="kpi-sidebar">
+        <div id="filtersPanel" class="filters-section">
+            <div class="filters-toolbar" style="margin-bottom:.5rem;">
+                <h1 style="margin:0; font-size:1.05rem; font-weight:700; color:#1f2937;">Filters</h1>
+                <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+                    <label class="switch" title="Compact density (experimental)">
+                        <input type="checkbox" id="densityToggle">
+                        <span style="font-size:.65rem; font-weight:600;">Compact</span>
+                    </label>
+                    <label class="toggle-pill" title="Cards view">
+                        <input type="checkbox" id="cardsViewToggle">
+                        <span>Cards</span>
+                    </label>
+                    <button type="button" id="openLegendBtn" class="btn btn-sm btn--secondary" style="margin-left:auto;">Legend</button>
+                </div>
             </div>
-    <form method="GET" class="filter-grid filter-bar cols-1" id="filtersBody">
-            <!-- Basics -->
-            <div class="subtle-heading">Basics</div>
-            <div class="form-group">
-                <label for="school_year">School Year</label>
-                <select name="school_year" id="school_year">
-                    {% for year in school_years %}
-                        <option value="{{ year }}" {% if year|stringformat:"s" == selected_school_year %}selected{% endif %}>
-                            SY {{ year }}-{{ year|add:1 }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="quarter">Quarter</label>
-                <select name="quarter" id="quarter">
-                    <option value="all" {% if selected_quarter == 'all' %}selected{% endif %}>All Quarters</option>
-                    <option value="Q1" {% if selected_quarter == 'Q1' %}selected{% endif %}>Quarter 1</option>
-                    <option value="Q2" {% if selected_quarter == 'Q2' %}selected{% endif %}>Quarter 2</option>
-                    <option value="Q3" {% if selected_quarter == 'Q3' %}selected{% endif %}>Quarter 3</option>
-                    <option value="Q4" {% if selected_quarter == 'Q4' %}selected{% endif %}>Quarter 4</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="kpi_part">KPI Part</label>
-                <select name="kpi_part" id="kpi_part">
-                    <option value="all" {% if selected_kpi_part == 'all' %}selected{% endif %}>All Parts</option>
-                    <option value="implementation" {% if selected_kpi_part == 'implementation' %}selected{% endif %}>% Implementation</option>
-                    <option value="slp" {% if selected_kpi_part == 'slp' %}selected{% endif %}>SLP % by Band</option>
-                    <option value="reading_crla" {% if selected_kpi_part == 'reading_crla' %}selected{% endif %}>Reading (CRLA)</option>
-                    <option value="reading_philiri" {% if selected_kpi_part == 'reading_philiri' %}selected{% endif %}>Reading (PHILIRI)</option>
-                    <option value="rma" {% if selected_kpi_part == 'rma' %}selected{% endif %}>RMA</option>
-                    <option value="supervision" {% if selected_kpi_part == 'supervision' %}selected{% endif %}>Instructional Supervision & TA</option>
-                    <option value="adm" {% if selected_kpi_part == 'adm' %}selected{% endif %}>ADM One-Stop-Shop & EiE</option>
-                </select>
-            </div>
-
-            <!-- Scope -->
-            <div class="subtle-heading">Scope</div>
-            {# SMEA Form filter removed as KPI Part already determines the scope #}
-
-            {% if sections %}<input type="hidden" name="section_code" id="section_code" value="{{ selected_section_code|default:'smme' }}">{% endif %}
-
-            <div class="form-group">
-                <label for="school_level">School Level</label>
-                <select name="school_level" id="school_level">
-                    <option value="all" {% if selected_school_level == 'all' %}selected{% endif %}>All Levels</option>
-                    <option value="elementary" {% if selected_school_level == 'elementary' %}selected{% endif %}>Elementary (K-6)</option>
-                    <option value="secondary" {% if selected_school_level == 'secondary' %}selected{% endif %}>Secondary (7-12)</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="district">District</label>
-                <select name="district" id="district">
-                    <option value="all" {% if not selected_district or selected_district == 'all' %}selected{% endif %}>All Districts</option>
-                    {% for district in all_districts %}
-                        <option value="{{ district.id }}" {% if district.id|stringformat:"s" == selected_district %}selected{% endif %}>
-                            {{ district.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="school">School</label>
-                <select name="school" id="school">
-                    <option value="all" {% if not selected_school or selected_school == 'all' %}selected{% endif %}>All Schools</option>
-                    {% for school in all_schools %}
-                        <option value="{{ school.id }}" {% if school.id|stringformat:"s" == selected_school %}selected{% endif %}>
-                            {{ school.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-        <!-- Advanced Filters -->
-                    {% if is_reading_detail %}
-                    {# When reading is selected via split KPI parts, fix reading_type via hidden field.
-                       Timing is now derived from Quarter, so no separate Timing control. #}
-                    <input type="hidden" id="reading_type" name="reading_type" value="{% if is_reading_philiri_detail %}philiri{% else %}crla{% endif %}">
-                    {% elif is_implementation_detail %}
-            <div class="form-group">
-                <label for="impl_focus">% Implementation Focus</label>
-                <select name="impl_focus" id="impl_focus">
-                    <option value="access" {% if impl_focus == 'access' %}selected{% endif %}>Access</option>
-                    <option value="quality" {% if impl_focus == 'quality' %}selected{% endif %}>Quality</option>
-                    <option value="equity" {% if impl_focus == 'equity' %}selected{% endif %}>Equity</option>
-                    <option value="enabling" {% if impl_focus == 'enabling' %}selected{% endif %}>Enabling Mechanism</option>
-                </select>
-            </div>
-                    {% elif is_slp_detail %}
-            <div class="form-group">
-                <label for="subject">Subject</label>
-                <select name="subject" id="subject">
-                    <option value="all" {% if selected_subject == 'all' %}selected{% endif %}>All Subjects</option>
-                    {% for s in available_subjects %}
-                        <option value="{{ s.0 }}" {% if s.0 == selected_subject %}selected{% endif %}>{{ s.1|default:s.0 }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            {# Removed multi-select Subjects per request; keep single Subject filter only #}
-
-            <div class="form-group">
-                <label for="slp_mode">SLP View</label>
-                <select name="slp_mode" id="slp_mode">
-                    <option value="summary" {% if slp_mode != 'detail' %}selected{% endif %}>% by Band (Summary)</option>
-                    <option value="detail" {% if slp_mode == 'detail' %}selected{% endif %}>Subject Details</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="grade_range">Grade Level</label>
-                <select name="grade_range" id="grade_range">
-                    <option value="all" {% if selected_grade_range == 'all' %}selected{% endif %}>All Grades</option>
-                    {% for g in available_grades %}
-                        <option value="{{ g }}" {% if g == selected_grade_range %}selected{% endif %}>{{ g }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-                        {# Removed multi-select Grades and presets per request; keep single Grade Level filter only #}
-            {% endif %}
-
-            {% if is_rma_detail %}
-            <div class="form-group">
-                <label for="rma_grade">RMA Grade</label>
-                <select name="rma_grade" id="rma_grade">
-                    {% for value, label in rma_grade_choices %}
-                        <option value="{{ value }}" {% if rma_grade == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-
-            <!-- Sorting & Special toggles -->
-            <div class="filters-divider"></div>
-            <div class="subtle-heading">Ordering</div>
-            <div class="form-row--2">
+            <form id="filtersBody" method="get" action="{% url 'smme_kpi_dashboard' %}" class="filter-grid">
+                <input type="hidden" name="sort_by" id="sort_by" value="{{ selected_sort_by|default:'school_name' }}">
+                <input type="hidden" name="sort_dir" id="sort_dir" value="{{ selected_sort_dir|default:'asc' }}">
                 <div class="form-group">
-                    <label for="sort_by">Sort By</label>
-                    <select name="sort_by" id="sort_by">
-                        {% for value, label in sort_options %}
-                            <option value="{{ value }}" {% if value == selected_sort_by %}selected{% endif %}>
-                                {{ label }}
-                            </option>
+                    <label for="kpi_part">KPI Part</label>
+                    <select name="kpi_part" id="kpi_part">
+                        <option value="all" {% if selected_kpi_part == 'all' %}selected{% endif %}>All</option>
+                        <option value="implementation" {% if selected_kpi_part == 'implementation' %}selected{% endif %}>Implementation</option>
+                        <option value="slp" {% if selected_kpi_part == 'slp' %}selected{% endif %}>SLP</option>
+                        <option value="reading_crla" {% if selected_kpi_part == 'reading_crla' %}selected{% endif %}>Reading (CRLA)</option>
+                        <option value="reading_philiri" {% if selected_kpi_part == 'reading_philiri' %}selected{% endif %}>Reading (PHILIRI)</option>
+                        <option value="rma" {% if selected_kpi_part == 'rma' %}selected{% endif %}>RMA</option>
+                        <option value="supervision" {% if selected_kpi_part == 'supervision' %}selected{% endif %}>Supervision & TA</option>
+                        <option value="adm" {% if selected_kpi_part == 'adm' %}selected{% endif %}>ADM & EiE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="reading_type">Reading Type</label>
+                    <select name="reading_type" id="reading_type">
+                        <option value="crla" {% if reading_type == 'crla' %}selected{% endif %}>CRLA</option>
+                        <option value="philiri" {% if reading_type == 'philiri' %}selected{% endif %}>PHILIRI</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="slp_mode">SLP View Mode</label>
+                    <select name="slp_mode" id="slp_mode">
+                        <option value="summary" {% if slp_mode == 'summary' %}selected{% endif %}>Summary</option>
+                        <option value="detail" {% if slp_mode == 'detail' %}selected{% endif %}>Detail</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="school_year">School Year</label>
+                    <select name="school_year" id="school_year">
+                        {% for year in school_years %}
+                            <option value="{{ year }}" {% if year == selected_school_year %}selected{% endif %}>SY {{ year }}-{{ year|add:1 }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="sort_dir">Sort Direction</label>
-                    <select name="sort_dir" id="sort_dir">
-                        <option value="asc" {% if selected_sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
-                        <option value="desc" {% if selected_sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+                    <label for="quarter">Quarter</label>
+                    <select name="quarter" id="quarter">
+                        <option value="all" {% if selected_quarter == 'all' or not selected_quarter %}selected{% endif %}>All</option>
+                        {% for p in periods %}
+                            <option value="{{ p.code }}" {% if selected_quarter == p.code %}selected{% endif %}>{{ p.label }}</option>
+                        {% endfor %}
                     </select>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label for="only_missing">Missing submissions</label>
-                <div class="switch">
-                    <input type="checkbox" id="only_missing" name="only_missing" value="1" {% if selected_only_missing %}checked{% endif %} {% if not missing_filter_applicable %}disabled title="Select a specific KPI Part and Quarter to enable"{% endif %}>
-                    <span>Show schools with no submission</span>
+                <div class="form-group">
+                    <label for="district">District</label>
+                    <select name="district" id="district">
+                        <option value="all" {% if selected_district == 'all' or not selected_district %}selected{% endif %}>All</option>
+                        {% for d in districts %}
+                            <option value="{{ d.code }}" {% if selected_district == d.code %}selected{% endif %}>{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-            </div>
-
-        </form>
-    </aside>
-    <main class="kpi-content">
-
-        <!-- Active filter chips (quick glance) -->
-    <div class="chips" id="activeFilterChips" aria-label="Active filters">
-            {% if selected_form_template and selected_form_template != 'all' %}
-                <span class="chip">Form: {% for f in available_forms %}{% if f.code == selected_form_template %}{{ f.label }}{% endif %}{% endfor %}</span>
-            {% endif %}
-            {% if selected_school_year %}
-                <span class="chip">SY: {{ selected_school_year }}-{{ selected_school_year|add:1 }}</span>
-            {% endif %}
-            {% if selected_quarter and selected_quarter != 'all' %}
-                <span class="chip">Quarter: {{ selected_quarter }}</span>
-            {% endif %}
-            {% if selected_district and selected_district != 'all' %}
-                <span class="chip">District: {% for d in all_districts %}{% if d.id|stringformat:'s' == selected_district %}{{ d.name }}{% endif %}{% endfor %}</span>
-            {% endif %}
-            {% if selected_school and selected_school != 'all' %}
-                <span class="chip">School: {% for s in all_schools %}{% if s.id|stringformat:'s' == selected_school %}{{ s.name }}{% endif %}{% endfor %}</span>
-            {% endif %}
-            {% if selected_subjects and selected_subjects|length > 0 %}
-                <span class="chip">Subjects: {{ selected_subjects|join:', ' }}</span>
-            {% elif selected_subject and selected_subject != 'all' %}
-                <span class="chip">Subject: {{ selected_subject }}</span>
-            {% endif %}
-            {% if selected_kpi_part == 'implementation' and impl_focus %}
-                <span class="chip">Implementation Focus: {{ impl_focus|capfirst }}</span>
-            {% endif %}
-            {# Timing chip removed; timing derives from Quarter #}
-            {% if is_slp_detail %}
-                <span class="chip">SLP View: {% if slp_mode == 'detail' %}Subject Details{% else %}% by Band{% endif %}</span>
-            {% endif %}
-            {% if selected_grades and selected_grades|length > 0 %}
-                <span class="chip">Grades: {{ selected_grades|join:', ' }}</span>
-            {% elif selected_grade_range and selected_grade_range != 'all' %}
-                <span class="chip">Grade: {{ selected_grade_range }}</span>
-            {% endif %}
-            {% if selected_only_missing %}
-                <span class="chip" title="Only schools with no submitted/noted form for this quarter">
-                    Missing only{% if missing_count is not None %} ({{ missing_count }}){% endif %}
-                </span>
-            {% endif %}
-        </div>
-        
-        <!-- Export/Action Bar -->
-        <div class="export-bar" style="display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:.5rem 0 1rem;">
-            <div class="export-meta" style="color:#374151;">
-                {% if is_slp_detail %}
-                    {% if slp_mode == 'detail' %}
-                        Showing <strong id="export-schools-count">{{ slp_subject_data|length }}</strong> schools (subject detail)
-                    {% else %}
-                        Showing <strong id="export-schools-count">{{ slp_distribution_data|length }}</strong> schools (SLP summary)
-                    {% endif %}
-                {% else %}
-                    Showing <strong id="export-schools-count">{{ kpi_table_data|length }}</strong> schools
-                {% endif %}
-                {% if selected_only_missing and missing_count is not None %}
-                    • Missing only: <strong>{{ missing_count }}</strong>
-                {% endif %}
-                • Filters: <span id="activeFiltersCount">0</span>
-            </div>
-            <div class="export-actions" style="display:flex; gap:.5rem; align-items:center;">
-          <input id="quickSearch" type="text" placeholder="Quick search schools…" aria-label="Quick search"
-              class="input--search" style="padding:.45rem .6rem; border:1px solid #d1d5db; border-radius:8px; min-width: 240px;" />
-                <a id="exportCsvBtn"
-                   class="btn btn--primary"
-                   href="{% url 'smme_kpi_export' %}?{% if request.GET %}{{ request.GET.urlencode }}{% endif %}"
-                   title="Export current view as CSV{% if not kpi_table_data and not is_slp_detail %} (no rows){% endif %}">
-                    Export CSV
-                </a>
-                <button type="button" id="openLegendBtn" class="btn btn--secondary" title="Show legend and glossary">Legend</button>
-                <a class="btn btn--secondary" href="{% url 'smme_kpi_dashboard' %}">Reset</a>
+                <div class="form-group">
+                    <label for="grade_range">Grade Range</label>
+                    <select name="grade_range" id="grade_range">
+                        <option value="all" {% if grade_range == 'all' or not grade_range %}selected{% endif %}>All</option>
+                        <option value="elementary" {% if grade_range == 'elementary' %}selected{% endif %}>Elementary</option>
+                        <option value="secondary" {% if grade_range == 'secondary' %}selected{% endif %}>Secondary</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="quickSearch">Quick Search</label>
+                    <input type="text" id="quickSearch" name="q" placeholder="Search school or district" style="padding:.55rem .85rem; border:1px solid var(--border); border-radius:8px; font-size:.92rem;" />
+                </div>
+                <div class="form-group">
+                    <label for="filtersCols">Columns Layout</label>
+                    <select id="filtersCols" class="toolbar-select">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Export</label>
+                    <a id="exportCsvBtn" href="{% url 'smme_kpi_export' %}" class="btn btn-sm btn--primary" style="text-decoration:none; display:inline-block;">CSV (<span id="export-schools-count">{{ kpi_table_data|length }}</span>)</a>
+                </div>
+                <div class="form-group" style="align-self:start;">
+                    <label>&nbsp;</label>
+                    <button class="btn btn--primary" type="submit">Apply</button>
+                </div>
+                <div class="form-group form-row--full" style="grid-column:1 / -1;">
+                    <div id="activeFilterChips" class="chips"></div>
+                </div>
+            </form>
+            <div style="margin-top:.5rem; font-size:.7rem; color:#6b7280;">Active: <span id="activeFiltersCount">0</span></div>
+            <div class="pill-tabs" role="tablist" aria-label="Quick KPI Tabs">
+                <div class="pill {% if selected_kpi_part == 'all' %}active{% endif %}" data-kpi="all">All</div>
+                <div class="pill {% if selected_kpi_part == 'implementation' %}active{% endif %}" data-kpi="implementation">Implementation</div>
+                <div class="pill {% if selected_kpi_part == 'slp' %}active{% endif %}" data-kpi="slp">SLP</div>
+                <div class="pill {% if selected_kpi_part == 'reading_crla' %}active{% endif %}" data-kpi="reading_crla">CRLA</div>
+                <div class="pill {% if selected_kpi_part == 'reading_philiri' %}active{% endif %}" data-kpi="reading_philiri">PHILIRI</div>
+                <div class="pill {% if selected_kpi_part == 'rma' %}active{% endif %}" data-kpi="rma">RMA</div>
+                <div class="pill {% if selected_kpi_part == 'supervision' %}active{% endif %}" data-kpi="supervision">Supervision</div>
+                <div class="pill {% if selected_kpi_part == 'adm' %}active{% endif %}" data-kpi="adm">ADM</div>
             </div>
         </div>
-
-    {% if selected_only_missing %}
-    <div class="alert" style="margin: 0 0 1rem 0; padding: .75rem 1rem; background: #fef3c7; border: 1px solid #fde68a; color: #92400e; border-radius: 6px;">
-        Showing schools with no submission for
-        <strong>
+    </div>
+    <!-- Main Content -->
+        <div class="kpi-content">
+<script>
+window.SMME_DASHBOARD_CONFIG = {
+    apiUrl: '{% url "smme_kpi_api" %}',
+    exportCsvBase: '{% url "smme_kpi_export" %}',
+    dashboardUrl: '{% url "smme_kpi_dashboard" %}',
+    isSlpDetail: {{ is_slp_detail|yesno:'true,false' }},
+    showAnalytics: {{ show_analytics|yesno:'true,false' }},
+    slpTrendData: {{ slp_trend_data|default:'[]'|safe }},
+    slpMode: '{{ slp_mode }}'
+};
+</script>
+<script type="module" src="{% static 'js/dashboard/smme_kpi_dashboard.js' %}"></script>
             {% if selected_form_template and selected_form_template != 'all' %}
                 {% for f in available_forms %}{% if f.code == selected_form_template %}{{ f.label }}{% endif %}{% endfor %}
             {% else %}
@@ -846,7 +163,7 @@
         No schools are missing a submission for the selected filters.
     </div>
     {% endif %}
-    {% endif %}
+    {# Removed stray endif that caused TemplateSyntaxError #}
 
     <!-- Enhanced Visual Analytics (for non-SLP detail view) -->
     {% if not is_slp_detail and kpi_table_data and show_analytics %}
@@ -883,59 +200,129 @@
             </div>
         </div>
 
-        <!-- Interactive Charts -->
-        <div class="chart-grid">
-            <div class="chart-card" style="grid-column: 1 / -1;">
-                <div class="chart-title">SLP Band Trends by Quarter (SY {{ graph_school_year }}-{{ graph_school_year|add:1 }})</div>
-                <div class="chart-container">
-                    <canvas id="slpTrendChart"></canvas>
+        </div>
+        {% endif %}
+        <!-- Summary Section -->
+        <div class="summary-section">
+            <h2 style="margin-top:0; color:#1f2937;">Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-card"><h3>{{ kpi_table_data|length }}</h3><p>Schools</p></div>
+                <div class="summary-card"><h3>{{ kpi_table_data|length|floatformat:0 }}</h3><p>Data Points</p></div>
+                <div class="summary-card"><h3>{{ periods|length }}</h3><p>Period{{ periods|length|pluralize }}</p></div>
+                <div class="summary-card"><h3>{{ selected_school_year }}</h3><p>School Year</p></div>
+            </div>
+        </div>
+
+        <!-- SLOP Summary placeholder (populated by JS when SLP view) -->
+        <div id="slopSummary" class="slop-summary" style="margin:2rem 0; display:none;">
+            <h2 style="margin-top:0; color:#1f2937;">SLOP Analysis</h2>
+            <table class="kpi-table" style="margin-top:1rem;">
+                <thead><tr><th>Reason</th><th style="text-align:center;">Count</th><th style="text-align:center;">Schools Affected</th></tr></thead>
+                <tbody>
+                    <tr><td>Pre-requisite skills not mastered</td><td style="text-align:center;" id="slop_a_count">0</td><td style="text-align:center;" id="slop_a_schools">0</td></tr>
+                    <tr><td>LLC difficult to teach</td><td style="text-align:center;" id="slop_b_count">0</td><td style="text-align:center;" id="slop_b_schools">0</td></tr>
+                    <tr><td>LLC not covered or taught during quarter</td><td style="text-align:center;" id="slop_c_count">0</td><td style="text-align:center;" id="slop_c_schools">0</td></tr>
+                    <tr><td>Learners have special education needs</td><td style="text-align:center;" id="slop_d_count">0</td><td style="text-align:center;" id="slop_d_schools">0</td></tr>
+                    <tr><td>Reading proficiency DNME/FS</td><td style="text-align:center;" id="slop_e_count">0</td><td style="text-align:center;" id="slop_e_schools">0</td></tr>
+                    <tr><td>Other observable reasons</td><td style="text-align:center;" id="slop_f_count">0</td><td style="text-align:center;" id="slop_f_schools">0</td></tr>
+                </tbody>
+                <tfoot><tr style="font-weight:600; background:#f8fafc;"><td>Total SLP Rows with Reasons</td><td style="text-align:center;" id="slopTotalRows">0</td><td style="text-align:center;" id="slopTotalSchools">0</td></tr></tfoot>
+            </table>
+        </div>
+
+        <!-- KPI Table Section (server-rendered fallback + JS client rendering) -->
+        <div class="kpi-table-section">
+            <div id="clientRenderedContent" style="display:none;"></div>
+            <div id="ajaxLoader" style="display:none;">
+                <div class="skeleton">
+                    <div class="shimmer-block shimmer-header" style="width:200px;"></div>
+                    <div class="row-group" aria-hidden="true">
+                        <div class="shimmer-block shimmer-wide"></div>
+                        <div class="shimmer-block shimmer-wide"></div>
+                        <div class="shimmer-block" style="width:100%;"></div>
+                        <div class="shimmer-block" style="width:100%;"></div>
+                        <div class="shimmer-block" style="width:100%;"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="serverRenderedContent">
+                <h2 style="margin-top:0; color:#1f2937;">SMME KPI Performance Table</h2>
+                <div style="overflow-x:auto;">
+                    <table class="kpi-table">
+                        <thead>
+                            <tr>
+                                <th>School</th>
+                                <th>District</th>
+                                <th>Level</th>
+                                <th>% Impl</th>
+                                <th>SLP</th>
+                                <th>CRLA</th>
+                                <th>PHILIRI</th>
+                                <th>RMA</th>
+                                <th>Supervision</th>
+                                <th>ADM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in kpi_table_data %}
+                            <tr>
+                                <td class="school-name">{{ row.school.name }}</td>
+                                <td class="district-name">{{ row.district }}</td>
+                                <td class="school-level"><span class="badge" style="background:{% if row.school_level == 'Elementary' %}#10b981{% elif row.school_level == 'Secondary' %}#3b82f6{% else %}#6b7280{% endif %}; color:#fff; padding:.25rem .5rem; border-radius:.25rem; font-size:.7rem;">{{ row.school_level }}</span></td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.implementation_class }}" style="width:{{ row.implementation }}%"></div><span class="kpi-bar-text">{{ row.implementation }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.slp_class }}" style="width:{{ row.slp }}%"></div><span class="kpi-bar-text">{{ row.slp }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.reading_crla_class }}" style="width:{{ row.reading_crla }}%"></div><span class="kpi-bar-text">{{ row.reading_crla }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.reading_philiri_class }}" style="width:{{ row.reading_philiri }}%"></div><span class="kpi-bar-text">{{ row.reading_philiri }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.rma_class }}" style="width:{{ row.rma }}%"></div><span class="kpi-bar-text">{{ row.rma }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.supervision_class }}" style="width:{{ row.supervision }}%"></div><span class="kpi-bar-text">{{ row.supervision }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                                <td>{% if row.has_data %}<div class="kpi-bar-cell"><div class="kpi-bar-fill {{ row.adm_class }}" style="width:{{ row.adm }}%"></div><span class="kpi-bar-text">{{ row.adm }}%</span></div>{% else %}<span class="no-data">No data</span>{% endif %}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="10" style="text-align:center; color:#6b7280; padding:2rem;">No data available for the selected filters.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
-
-    <!-- Summary Section -->
-    <div class="summary-section">
-        <h2 style="margin-top: 0; color: #1f2937;">Summary</h2>
-        <div class="summary-grid">
-            <div class="summary-card">
-                <h3>
-                    {% if is_slp_detail %}
-                        {% if slp_mode == 'detail' %}
-                            {{ slp_subject_data|length }}
-                        {% else %}
-                            {{ slp_distribution_data|length }}
-                        {% endif %}
-                    {% else %}
-                        {{ kpi_table_data|length }}
-                    {% endif %}
-                </h3>
-                <p>Schools</p>
+    </div><!-- /.kpi-content -->
+</div><!-- /.dashboard-container -->
+<!-- Legend / Glossary Modal -->
+<div id="legendModal" role="dialog" aria-modal="true" aria-labelledby="legendTitle" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1000;">
+    <div style="background:#fff; max-width:720px; margin:5vh auto; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.2);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb;">
+            <h3 id="legendTitle" style="margin:0; color:#111827;">Legend & Glossary</h3>
+            <button type="button" id="closeLegendBtn" class="btn btn--secondary">Close</button>
+        </div>
+        <div style="padding:1rem 1.25rem; color:#374151; line-height:1.5; max-height:65vh; overflow:auto;">
+            <p style="margin-top:0;">Quick references for KPI columns and color cues.</p>
+            <ul style="margin:.5rem 0 1rem 1.25rem;">
+                <li><strong>% Implementation</strong> — Composite across Access, Quality, Equity, Enabling.</li>
+                <li><strong>SLP</strong> — School Learning Program overall performance.</li>
+                <li><strong>Reading (CRLA)</strong> — Comprehensive Rapid Literacy Assessment bands.</li>
+                <li><strong>Reading (PHILIRI)</strong> — Philippine Informal Reading Inventory bands.</li>
+                <li><strong>RMA</strong> — Remedial Math Assessment proficiency distribution.</li>
+                <li><strong>Supervision & TA</strong> — Portion of teachers supervised/observed provided TA.</li>
+                <li><strong>ADM & EiE</strong> — Alternative Delivery Modes and Education in Emergencies coverage.</li>
+            </ul>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-high" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>High / desirable</span>
             </div>
-            <div class="summary-card">
-                <h3>
-                    {% if is_slp_detail %}
-                        {% if slp_mode == 'detail' %}
-                            {{ slp_subject_data|length|floatformat:0 }}
-                        {% else %}
-                            {{ slp_distribution_data|length|floatformat:0 }}
-                        {% endif %}
-                    {% else %}
-                        {{ kpi_table_data|length|floatformat:0 }}
-                    {% endif %}
-                </h3>
-                <p>Data Points</p>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-medium" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>Medium</span>
             </div>
-            <div class="summary-card">
-                <h3>{{ periods|length }}</h3>
-                <p>Period{{ periods|length|pluralize }}</p>
-            </div>
-            <div class="summary-card">
-                <h3>{{ selected_school_year }}</h3>
-                <p>School Year</p>
+            <div style="display:flex; gap:1rem; align-items:center; margin-top:.5rem;">
+                <span class="kpi-bar-fill performance-low" style="width:40px; height:8px; border-radius:4px;"></span>
+                <span>Low / needs attention</span>
             </div>
         </div>
+    </div>
+</div>
+{% endblock %}
+        </table>
     </div>
 
     <!-- KPI Table Section -->
@@ -3025,4 +2412,6 @@ setTimeout(animateProgressBars, 500);
 // Close DOMContentLoaded handler
 });
 </script>
+    </div><!-- /.kpi-content -->
+</div><!-- /.dashboard-container -->
 {% endblock %}

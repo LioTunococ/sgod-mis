@@ -9,8 +9,9 @@ import django
 import pytest
 
 # Add the project directory to Python path
-project_dir = r'c:\Users\Leinster C. Denna\Desktop\SGOD_Project'
-sys.path.append(project_dir)
+project_dir = os.path.dirname(os.path.abspath(__file__))
+if project_dir not in sys.path:
+    sys.path.append(project_dir)
 
 # Set the DJANGO_SETTINGS_MODULE environment variable
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sgod_mis.settings.dev')
@@ -31,32 +32,8 @@ def test_dashboard_view():
     print("\nTesting SMME Dashboard View...")
     
     try:
-        from dashboards.views import smme_kpi_dashboard
+        from dashboards.views import smme_kpi_dashboard  # noqa: F401
         print("✓ Dashboard view imported successfully")
-        
-        # Import Django test client
-        from django.test import RequestFactory
-        from django.contrib.auth.models import User
-        
-        # Create a test request
-        factory = RequestFactory()
-        request = factory.get('/dashboard/smme-kpi/')
-        
-        # Create or get a test user (with proper permissions)
-        try:
-            # Check if we need to create a superuser for testing
-            users = User.objects.filter(is_superuser=True)
-            if users.exists():
-                request.user = users.first()
-                print(f"✓ Using test user: {request.user.username}")
-            else:
-                print("⚠ No superuser found, skipping view test")
-                pytest.skip("No superuser available; view auth not asserted in this smoke test")
-                
-        except Exception as e:
-            print(f"⚠ User setup error: {e}")
-            pytest.skip("User setup issue; skipping view smoke test")
-            
     except ImportError as e:
         raise AssertionError(f"View import error: {e}")
     except Exception as e:

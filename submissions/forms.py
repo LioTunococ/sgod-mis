@@ -398,6 +398,8 @@ class Form1SLPRowForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        # Allow callers to relax certain validations for partial saves
+        self.strict: bool = bool(kwargs.pop('strict', True))
         super().__init__(*args, **kwargs)
         self.fields["grade_label"].disabled = True
         self.fields["grade_label"].widget = forms.HiddenInput()
@@ -477,9 +479,10 @@ class Form1SLPRowForm(forms.ModelForm):
             raise ValidationError(f"Totals for {grade_value} ({subject_label}) cannot exceed enrolment.")
 
         # Validate reasons: if 'f' selected, require reason_other 2-5 sentences
+        # Only enforce in strict mode (full submit). For partial saves, allow blank.
         reasons = cleaned.get("reasons") or []
         other_text = (cleaned.get("reason_other") or "").strip()
-        if "f" in reasons:
+        if self.strict and "f" in reasons:
             # Naive sentence count by period/question mark/exclamation
             sent_count = len([s for s in other_text.replace("!", ".").replace("?", ".").split(".") if s.strip()])
             if sent_count < 2:

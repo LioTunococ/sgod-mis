@@ -8,6 +8,7 @@
     {% block head_extra %}{% endblock %}
   </head>
   <body class="container">
+    {# Removed duplicate ad-hoc nav; rely on existing nav partials included by child templates #}
         {% block content %}{% endblock %}
   </body>
 </html>

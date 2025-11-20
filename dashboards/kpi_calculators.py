@@ -489,7 +489,14 @@ def calculate_school_kpis_simple(school, periods, section_code='smme'):
         'rma': 0,
         'supervision': 0,
         'adm': 0,
-        'period_count': 0
+        'period_count': 0,
+        # SLOP / Non-mastery reason counts (aggregate occurrences across SLP rows in included periods)
+        'slop_prereq_count': 0,          # code 'a'
+        'slop_llc_difficult_count': 0,   # code 'b'
+        'slop_llc_not_covered_count': 0, # code 'c'
+        'slop_sped_needs_count': 0,      # code 'd'
+        'slop_reading_link_count': 0,    # code 'e'
+        'slop_other_count': 0            # code 'f'
     }
     
     has_any_data = False
@@ -520,6 +527,23 @@ def calculate_school_kpis_simple(school, periods, section_code='smme'):
                         proficient_count = (row.s or 0) + (row.vs or 0) + (row.o or 0)
                         proficiency_rate = (proficient_count / row.enrolment) * 100
                         subject_proficiency_rates.append(proficiency_rate)
+
+                    # Aggregate SLOP / non-mastery reason codes from this row
+                    reasons_csv = (row.non_mastery_reasons or '').strip()
+                    if reasons_csv:
+                        for code in [c.strip() for c in reasons_csv.split(',') if c.strip()]:
+                            if code == 'a':
+                                kpi_totals['slop_prereq_count'] += 1
+                            elif code == 'b':
+                                kpi_totals['slop_llc_difficult_count'] += 1
+                            elif code == 'c':
+                                kpi_totals['slop_llc_not_covered_count'] += 1
+                            elif code == 'd':
+                                kpi_totals['slop_sped_needs_count'] += 1
+                            elif code == 'e':
+                                kpi_totals['slop_reading_link_count'] += 1
+                            elif code == 'f':
+                                kpi_totals['slop_other_count'] += 1
                 
                 # Average proficiency rate across all subjects
                 if subject_proficiency_rates:
@@ -659,7 +683,13 @@ def calculate_school_kpis_simple(school, periods, section_code='smme'):
             'rma': round(kpi_totals['rma'] / kpi_totals['period_count'], 1),
             'supervision': round(kpi_totals['supervision'] / kpi_totals['period_count'], 1),
             'adm': round(kpi_totals['adm'] / kpi_totals['period_count'], 1),
-            'has_data': True
+            'has_data': True,
+            'slop_prereq_count': kpi_totals['slop_prereq_count'],
+            'slop_llc_difficult_count': kpi_totals['slop_llc_difficult_count'],
+            'slop_llc_not_covered_count': kpi_totals['slop_llc_not_covered_count'],
+            'slop_sped_needs_count': kpi_totals['slop_sped_needs_count'],
+            'slop_reading_link_count': kpi_totals['slop_reading_link_count'],
+            'slop_other_count': kpi_totals['slop_other_count']
         }
     else:
         return {
@@ -674,7 +704,13 @@ def calculate_school_kpis_simple(school, periods, section_code='smme'):
             'rma': 0,
             'supervision': 0,
             'adm': 0,
-            'has_data': False
+            'has_data': False,
+            'slop_prereq_count': 0,
+            'slop_llc_difficult_count': 0,
+            'slop_llc_not_covered_count': 0,
+            'slop_sped_needs_count': 0,
+            'slop_reading_link_count': 0,
+            'slop_other_count': 0
         }
 
 

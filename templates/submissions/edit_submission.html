@@ -12,7 +12,8 @@
     <!-- Boring Design System: Simple, Clean, Professional -->
     <style>
       /* SLP duplicate proficiency banner suppression */
-      .subject-content > .validation-errors { display:none !important; }
+      /* Allow the JS-placed compact banner '.slp-validation-banner' to show */
+      .subject-content > .validation-errors:not(.slp-validation-banner) { display:none; }
       .proficiency-section .validation-errors { display:none; /* JS will toggle to flex when needed */ }
       /* Global read-only hover cue across the entire form when editing is disabled */
       form[data-can-edit="0"] input,
@@ -560,7 +561,7 @@
                               {% endif %}
                             </div>
                             <div class="proficiency-field">
-                              <label>Did Not Meet</label>
+                              <label>Did Not Meet Expectations</label>
                               {% if can_edit %}
                                 {{ form.dnme }}
                               {% else %}
@@ -712,7 +713,7 @@
                         <!-- Save Button for this Subject -->
                         {% if can_edit %}
                         <div class="subject-save-actions">
-                          <button type="submit" class="btn btn-success save-subject-btn" name="action" value="save_subject" data-subject-id="{{ form.instance.pk }}" data-subject-prefix="{{ form.prefix }}" data-subject-index="{{ subject_index }}">
+                          <button type="submit" class="btn btn-success save-subject-btn" name="action" value="save_subject" data-subject-id="{{ form.instance.pk }}" data-subject-prefix="{{ form.prefix }}" data-subject-index="{{ subject_index }}" data-save-subject-prefix="{{ form.prefix }}">
                             Save This Subject
                           </button>
                           <span class="save-hint">Save your progress for {{ form.instance.grade_label }} - {{ form.instance.subject }}</span>
@@ -933,6 +934,12 @@
                 {% for field, errs in form.errors.items %}
                   {% for err in errs %}<div>- {{ field|capfirst }}: {{ err }}</div>{% endfor %}
                 {% endfor %}
+                {% if can_edit %}
+                <div class="projects-add-actions" style="margin-top:1.5rem;">
+                  <button type="button" class="btn btn--primary" id="add-project-btn" onclick="addProjectRow()">Add Project</button>
+                  <small style="display:block;margin-top:.5rem;color:#6b7280;">Click to insert a new blank project; then Save Draft to persist.</small>
+                </div>
+                {% endif %}
               </div>
               {% endif %}
               <h3 class="level-title">{{ form.instance.get_level_display }} Results</h3>
@@ -1414,7 +1421,7 @@
                   <th style="border:1px solid #d1d5db; padding:.5rem; text-align:left; font-style:italic;">Other Interventions Implemented to ensure Learning Continuity</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="adm-table-body">
                 {% for form in adm_formset %}
                   {{ form.id }}
                   <tr>
@@ -1426,7 +1433,21 @@
                   </tr>
                 {% endfor %}
               </tbody>
+              {# Hidden template row for dynamic add #}
+              <tbody style="display:none;">
+                <tr class="adm-row-template">
+                  {{ adm_formset.empty_form.id }}
+                  <td style="border:1px solid #d1d5db; padding:.5rem; vertical-align:top;">{{ adm_formset.empty_form.ppas_conducted }}</td>
+                  <td style="border:1px solid #d1d5db; padding:.5rem; vertical-align:top; text-align:center;">{{ adm_formset.empty_form.ppas_physical_target }}</td>
+                  <td style="border:1px solid #d1d5db; padding:.5rem; vertical-align:top; text-align:center;">{{ adm_formset.empty_form.ppas_physical_actual }}</td>
+                  <td style="border:1px solid #d1d5db; padding:.5rem; vertical-align:top;">{{ adm_formset.empty_form.q1_response }}</td>
+                  <td style="border:1px solid #d1d5db; padding:.5rem; vertical-align:top;">{{ adm_formset.empty_form.q2_response }}</td>
+                </tr>
+              </tbody>
             </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:.75rem;">
+            <button type="button" class="btn btn--secondary" id="add-adm-ppa">Add Row</button>
           </div>
         </div>
         {% endif %}
@@ -1464,6 +1485,77 @@
         <div class="section-card" style="margin-top: 2rem; padding: 1.5rem; background: #f0fdf4; border: 1px solid #86efac;">
           <div class="section-card__header" style="color: #16a34a;">Ready to Submit?</div>
           <p style="margin-bottom: 1.5rem;">Review all tabs and ensure all required information is complete before submitting to your section head.</p>
+          {# Readiness overview: SLP and Projects quick summary #}
+          <div class="readiness-overview" style="margin-bottom:1rem; padding:.75rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:.5rem;">
+            <div style="font-weight:600; color:#374151; margin-bottom:.5rem; display:flex; align-items:center; gap:.5rem;">
+              <span style="display:inline-block; width:.6rem; height:.6rem; background:#2563eb; border-radius:50%;"></span>
+              Readiness Overview
+            </div>
+            <div style="display:grid; gap:.5rem;">
+              {% comment %} SLP Summary {% endcomment %}
+              {% with total=0 complete=0 %}
+                {% for f in slp_formset %}{% if f.instance.is_offered %}{% with total=total|add:1 %}{% endwith %}{% if f.instance|get_subject_status == 'complete' %}{% with complete=complete|add:1 %}{% endwith %}{% endif %}{% endif %}{% endfor %}
+                <div style="display:flex; flex-direction:column; gap:.25rem;">
+                  <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                    <strong style="color:#374151;">SLP Subjects:</strong>
+                    <span class="status-badge {% if complete == total and total > 0 %}complete{% elif complete == 0 %}not-started{% else %}incomplete{% endif %}">
+                      {% if total > 0 %}{{ complete }}/{{ total }} {% if complete == total %}Complete{% elif complete == 0 %}Not Started{% else %}In Progress{% endif %}{% else %}No Offered Subjects{% endif %}
+                    </span>
+                  </div>
+                  {% if complete != total and total > 0 %}
+                    <div style="font-size:.75rem; color:#6b7280; line-height:1.2;">
+                      <strong>Pending:</strong>
+                      {% for f in slp_formset %}
+                        {% if f.instance.is_offered and f.instance|get_subject_status != 'complete' %}
+                          <span class="status-badge in-progress" style="margin:.125rem .25rem .125rem 0;">{{ f.instance.grade_label }} {{ f.instance.get_subject_display }}</span>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              {% endwith %}
+              {% comment %} Projects & Activities {% endcomment %}
+              <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                <strong style="color:#374151;">Projects &amp; Activities:</strong>
+                {% if projects_formset.total_form_count %}
+                  <span class="status-badge {% if projects_formset.total_form_count %}incomplete{% endif %}">In Progress</span>
+                {% else %}
+                  <span class="status-badge not-started">Not Started</span>
+                {% endif %}
+              </div>
+              {% comment %} ADM {% endcomment %}
+              <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                <strong style="color:#374151;">ADM &amp; EiE:</strong>
+                {% if adm_header_form and adm_is_offered %}
+                  {% if adm_formset and adm_formset.total_form_count %}
+                    <span class="status-badge incomplete">In Progress</span>
+                  {% else %}
+                    <span class="status-badge not-started">Not Started</span>
+                  {% endif %}
+                {% else %}
+                  <span class="status-badge not-applicable">Not Offered</span>
+                {% endif %}
+              </div>
+              {% comment %} Reading (CRLA/PHILIRI basic completeness heuristic) {% endcomment %}
+              <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                <strong style="color:#374151;">Reading:</strong>
+                {% if reading_crla_new_formset or reading_philiri_new_formset %}
+                  <span class="status-badge incomplete">In Progress</span>
+                {% else %}
+                  <span class="status-badge not-started">Not Started</span>
+                {% endif %}
+              </div>
+              {% comment %} RMA {% endcomment %}
+              <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+                <strong style="color:#374151;">RMA:</strong>
+                {% if rma_row_formset %}
+                  <span class="status-badge incomplete">In Progress</span>
+                {% else %}
+                  <span class="status-badge not-started">Not Started</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
           <button type="submit" class="btn btn--success" name="action" value="submit_submission">
             Submit to Section
           </button>
@@ -1484,7 +1576,8 @@
     </div>
 
     <!-- Form navigation and validation script -->
-    <script src="{% static 'js/submission-form.js' %}"></script>
+    {# Cache-bust the submission JS to avoid stale client code causing data loss #}
+    <script src="{% static 'js/submission-form.js' %}?v={{ submission.updated_at|date:'U' }}"></script>
 
     
 

@@ -13,25 +13,127 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = byId('submission-form');
     if (!form) return;
 
+    // Ensure hidden action + current_subject_prefix inputs exist for reliable targeted save detection
+    let actionHidden = form.querySelector('input[name="action"][type="hidden"]');
+    if (!actionHidden) {
+      actionHidden = document.createElement('input');
+      actionHidden.type = 'hidden';
+      actionHidden.name = 'action';
+      form.appendChild(actionHidden);
+    }
+    let prefixHidden = form.querySelector('input[name="current_subject_prefix"][type="hidden"]');
+    if (!prefixHidden) {
+      prefixHidden = document.createElement('input');
+      prefixHidden.type = 'hidden';
+      prefixHidden.name = 'current_subject_prefix';
+      form.appendChild(prefixHidden);
+    }
+
+    // Attach click handlers to per-subject save buttons to set targeted prefix/action before submit
+    document.querySelectorAll('[data-save-subject-prefix]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const prefix = btn.getAttribute('data-save-subject-prefix');
+        if (prefix) {
+          prefixHidden.value = prefix;
+          actionHidden.value = 'save_subject';
+          window._targetedSLPPrefix = prefix;
+        }
+      });
+    });
+
     // Diagnostic: log all DELETE inputs present in the form before submit
     form.addEventListener('submit', function(ev) {
       const deleteInputs = Array.from(form.querySelectorAll('input[type="hidden"][name$="-DELETE"]'));
       console.log('DIAGNOSTIC: DELETE inputs before submit:', deleteInputs.map(i => i.name + '=' + i.value));
       const totals = Array.from(form.querySelectorAll('input[name$="-TOTAL_FORMS"]')).map(i => i.name + '=' + i.value);
       console.log('DIAGNOSTIC: TOTAL_FORMS:', totals.join(', '));
-      // Serialize competencies paragraph (enumerated 1-4) directly stored in textarea
+      try {
+        const allSubjects = Array.from(document.querySelectorAll('.subject-content'));
+        const dirty = window._slpDirtyPrefixes || new Set();
+        if (window._lastSLPPrefix) dirty.add(window._lastSLPPrefix);
+        // Targeted Save This Subject: only sync that subject; otherwise sync dirty subset or all if none marked dirty
+        // Determine targeted prefix: prefer hidden inputs (set by button click), fallback to window global, then submitter if available
+        let submitterAction = '';
+        try { if (ev.submitter && ev.submitter.name === 'action') submitterAction = ev.submitter.value; } catch(_e) {}
+        const hiddenActionVal = actionHidden.value || submitterAction;
+        const hiddenPrefixVal = prefixHidden.value || window._targetedSLPPrefix || null;
+        const targetedPrefix = hiddenActionVal === 'save_subject' ? hiddenPrefixVal : null;
+        let subjectsToSync;
+        if (targetedPrefix) {
+          subjectsToSync = allSubjects.filter(sc => {
+            const probe = sc.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+            const ref = probe ? (probe.id || probe.name || '') : '';
+            const mPrefix = ref.match(/(slp_rows-\d+)/);
+            return mPrefix && mPrefix[1] === targetedPrefix;
+          });
+        } else if (dirty.size) {
+          subjectsToSync = allSubjects.filter(sc => {
+            const probe = sc.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+            const ref = probe ? (probe.id || probe.name || '') : '';
+            const mPrefix = ref.match(/(slp_rows-\d+)/);
+            return mPrefix && dirty.has(mPrefix[1]);
+          });
+        } else {
+          subjectsToSync = allSubjects;
+        }
+        subjectsToSync.forEach(sc => {
+          const probe = sc.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+          const ref = probe ? (probe.id || probe.name || '') : '';
+          const mPrefix = ref.match(/(slp_rows-\d+)/);
+          if (!mPrefix) return;
+          const p = mPrefix[1];
+          let llcText = '';
+          let interventionsJson = '';
+          let reasonsCodes = [];
+          let reasonsOther = '';
+          const llcTa = sc.querySelector('textarea.llc-storage');
+          llcText = llcTa ? llcTa.value : '';
+          reasonsCodes = Array.from(sc.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => cb.value);
+          const otherVisible = sc.querySelector('.reasons-section .reason-other textarea');
+          reasonsOther = otherVisible ? (otherVisible.value || '').trim() : '';
+          const interventionTextareas = Array.from(sc.querySelectorAll('.interventions-pairs textarea.intervention-textarea'));
+            if (interventionTextareas.length) {
+              interventionsJson = JSON.stringify(interventionTextareas.map(ta => ({
+                code: ta.getAttribute('data-reason-code') || '',
+                intervention: (ta.value || '').trim()
+              })));
+            }
+          const llcField = sc.querySelector(`textarea[name="${p}-top_three_llc"]`) || form.querySelector(`textarea[name="${p}-top_three_llc"]`) || (() => { const t=document.createElement('textarea'); t.name=`${p}-top_three_llc`; t.style.display='none'; form.appendChild(t); return t; })();
+          llcField.value = llcText;
+          const planField = sc.querySelector(`textarea[name="${p}-intervention_plan"]`) || form.querySelector(`textarea[name="${p}-intervention_plan"]`) || (() => { const t=document.createElement('textarea'); t.name=`${p}-intervention_plan`; t.style.display='none'; form.appendChild(t); return t; })();
+          if (interventionsJson && /"intervention":"?[^"}]*"?/.test(interventionsJson)) {
+            planField.value = interventionsJson;
+          }
+          const reasonsField = sc.querySelector(`input[name="${p}-non_mastery_reasons"]`) || form.querySelector(`input[name="${p}-non_mastery_reasons"]`) || (() => { const i=document.createElement('input'); i.type='hidden'; i.name=`${p}-non_mastery_reasons`; form.appendChild(i); return i; })();
+          reasonsField.value = reasonsCodes.join(',');
+          const otherField = sc.querySelector(`textarea[name="${p}-non_mastery_other"]`) || form.querySelector(`textarea[name="${p}-non_mastery_other"]`) || (() => { const i=document.createElement('textarea'); i.name=`${p}-non_mastery_other`; i.style.display='none'; form.appendChild(i); return i; })();
+          otherField.value = reasonsOther;
+          console.log('[SLP][client] Sync subject', p, 'dirty:', dirty.has(p), { llc_len: (llcField.value||'').length, reasons_codes: reasonsField.value, other_len: (otherField.value||'').length, interventions_len: (planField.value||'').length });
+        });
+      } catch (e) { console.warn('[SLP][client] submit sync error', e); }
+      // Serialize competencies textarea as-is; only trim trailing blank lines (do not drop non-numbered content)
       document.querySelectorAll('.llc-section').forEach(section => {
         const ta = section.querySelector('textarea.llc-storage');
         if (!ta) return;
-        // Clean trailing blank enumerated lines (e.g. "1. \n2. \n")
-        const cleaned = ta.value.split(/\n/).map(l => l.trim()).filter(l => l && /\d+\./.test(l));
-        // Preserve original formatting if user entered paragraphs; else rebuild numbered list
-        if (cleaned.length) {
-          ta.value = cleaned.join('\n');
-        }
+        const lines = ta.value.split(/\n/);
+        while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+        const cleaned = lines.join('\n');
+        // If user never added real content (only placeholder enumerations like "1.", "2." etc.), treat as blank
+        const nonEmptyLines = lines.filter(l => l.trim().length > 0);
+        const allPlaceholders = nonEmptyLines.length > 0 && nonEmptyLines.every(l => /^([1-4])\.\s*$/.test(l.trim()));
+        ta.value = allPlaceholders ? '' : cleaned;
       });
-      // Serialize reasons selections
+      // Serialize reasons selections only for dirty subjects
       document.querySelectorAll('.reasons-section').forEach(section => {
+        const sc = section.closest('.subject-content');
+        if (sc) {
+          const probe = sc.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+          const ref = probe ? (probe.id || probe.name || '') : '';
+          const mPrefix = ref.match(/(slp_rows-\d+)/);
+          const dirtySet = window._slpDirtyPrefixes;
+          if (targetedPrefix && mPrefix && mPrefix[1] !== targetedPrefix) return; // only targeted subject
+          if (!targetedPrefix && mPrefix && dirtySet && !dirtySet.has(mPrefix[1])) return; // skip non-dirty when not targeted
+        }
         const hiddenCodes = section.querySelector('input[type="hidden"][name$="-non_mastery_reasons"]');
         if (!hiddenCodes) return;
         const codes = [];
@@ -48,11 +150,22 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!storage) return;
         const subjectContent = section.closest('.subject-content');
         if (!subjectContent) return;
+        const probe = subjectContent.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+        const ref = probe ? (probe.id || probe.name || '') : '';
+        const mPrefix = ref.match(/(slp_rows-\d+)/);
+        const dirtySet = window._slpDirtyPrefixes;
+        if (targetedPrefix && mPrefix && mPrefix[1] !== targetedPrefix) return; // skip other subjects on targeted save
+        if (!targetedPrefix && mPrefix && dirtySet && !dirtySet.has(mPrefix[1])) return; // skip non-dirty
         const selected = Array.from(subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => {
           const labelSpan = cb.closest('label') && cb.closest('label').querySelector('span');
           const label = labelSpan ? labelSpan.textContent.trim() : (cb.closest('label') ? cb.closest('label').textContent.trim() : cb.value);
           return { code: cb.value, reason: label };
         });
+        // If no reasons are selected, do NOT overwrite existing stored interventions
+        if (selected.length === 0) {
+          try { console.log('[SLP] No reasons selected; preserving existing interventions storage'); } catch(e) {}
+          return;
+        }
         const data = selected.map(item => {
           const ta = section.querySelector(`.interventions-pairs textarea.intervention-textarea[data-reason-code="${item.code}"]`);
           const intervention = ta ? (ta.value || '').trim() : '';
@@ -62,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       // Serialize Reading Difficulties & Interventions (new structured builder)
       const rdStorage = document.querySelector('.reading-difficulties-storage');
-      if (rdStorage) {
+      if (rdStorage && (form.dataset.currentTab === 'reading')) {
         const data = [];
         document.querySelectorAll('.reading-difficulty-grade').forEach(gradeEl => {
           const grade = gradeEl.getAttribute('data-grade');
@@ -101,8 +214,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         try { storage.value = JSON.stringify(data); } catch (e) { storage.value = '[]'; }
       }
-      serializeRMA('.rma-pretest-storage', '.rma-pretest-plan');
-      serializeRMA('.rma-eosy-storage', '.rma-eosy-plan');
+      if (form.dataset.currentTab === 'rma') {
+        serializeRMA('.rma-pretest-storage', '.rma-pretest-plan');
+        serializeRMA('.rma-eosy-storage', '.rma-eosy-plan');
+      }
     });
     const canEdit = (form.dataset.canEdit === '1');
     const nextTabInput = byId('id_next_tab');
@@ -291,7 +406,90 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!tbody) return;
     const table = tbody.closest('table');
     const thead = table ? table.querySelector('thead') : null;
-    const count = tbody.querySelectorAll('.activity-row').length;
+          // Serialize competencies textarea as-is; only trim trailing blank lines (do not drop non-numbered content)
+          document.querySelectorAll('.llc-section').forEach(section => {
+            const ta = section.querySelector('textarea.llc-storage');
+            if (!ta) return;
+            const lines = ta.value.split(/\n/);
+            while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+            ta.value = lines.join('\n');
+          });
+          // Serialize reasons selections
+          document.querySelectorAll('.reasons-section').forEach(section => {
+            const hiddenCodes = section.querySelector('input[type="hidden"][name$="-non_mastery_reasons"]');
+            if (!hiddenCodes) return;
+            const codes = [];
+            section.querySelectorAll('input.reason-choice:checked').forEach(cb => codes.push(cb.value));
+            hiddenCodes.value = codes.join(',');
+            const otherHidden = section.querySelector('textarea[name$="-non_mastery_other"]');
+            const otherVisible = section.querySelector('.reason-other textarea');
+            if (otherHidden && otherVisible) otherHidden.value = (otherVisible.value || '').trim();
+          });
+          // Serialize remediation interventions table to JSON stored in hidden interventions-storage
+          document.querySelectorAll('.interventions-plan').forEach(section => {
+            const storage = section.querySelector('textarea.interventions-storage');
+            if (!storage) return;
+            const subjectContent = section.closest('.subject-content');
+            if (!subjectContent) return;
+            const selected = Array.from(subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => {
+              const labelSpan = cb.closest('label') && cb.closest('label').querySelector('span');
+              const label = labelSpan ? labelSpan.textContent.trim() : (cb.closest('label') ? cb.closest('label').textContent.trim() : cb.value);
+              return { code: cb.value, reason: label };
+            });
+            // If no reasons are selected, do NOT overwrite existing stored interventions
+            if (selected.length === 0) {
+              try { console.log('[SLP] No reasons selected; preserving existing interventions storage'); } catch(e) {}
+              return;
+            }
+            const data = selected.map(item => {
+              const ta = section.querySelector(`.interventions-pairs textarea.intervention-textarea[data-reason-code="${item.code}"]`);
+              const intervention = ta ? (ta.value || '').trim() : '';
+              return { code: item.code, reason: item.reason, intervention };
+            });
+            try { storage.value = JSON.stringify(data); } catch (e) { storage.value = ''; }
+          });
+          // Serialize Reading Difficulties & Interventions (new structured builder)
+          const rdStorage = document.querySelector('.reading-difficulties-storage');
+          if (rdStorage) {
+            const data = [];
+            document.querySelectorAll('.reading-difficulty-grade').forEach(gradeEl => {
+              const grade = gradeEl.getAttribute('data-grade');
+              const pairs = [];
+              gradeEl.querySelectorAll('.reading-difficulty-pair').forEach(pairEl => {
+                const diffTa = pairEl.querySelector('textarea.reading-difficulty-textarea');
+                const intTa = pairEl.querySelector('textarea.reading-intervention-textarea');
+                const difficulty = diffTa ? (diffTa.value || '').trim() : '';
+                const intervention = intTa ? (intTa.value || '').trim() : '';
+                if (difficulty || intervention) {
+                  pairs.push({ difficulty, intervention });
+                }
+              });
+              data.push({ grade, pairs });
+            });
+            try { rdStorage.value = JSON.stringify(data); } catch(e) { rdStorage.value = '[]'; }
+          }
+          // Serialize new RMA difficulties (Pre-Test Q3 and EOSY Q1)
+          function serializeRMA(selectorStorage, selectorPlan) {
+            const storage = document.querySelector(selectorStorage);
+            const planRoot = document.querySelector(selectorPlan);
+            if (!storage || !planRoot) return;
+            const data = [];
+            planRoot.querySelectorAll('.rma-difficulty-grade').forEach(gradeEl => {
+              const grade = gradeEl.getAttribute('data-grade');
+              const pairs = [];
+              gradeEl.querySelectorAll('.rma-difficulty-pair').forEach(pairEl => {
+                const diffTa = pairEl.querySelector('textarea.rma-difficulty-textarea');
+                const intTa = pairEl.querySelector('textarea.rma-intervention-textarea');
+                const difficulty = diffTa ? (diffTa.value || '').trim() : '';
+                const intervention = intTa ? (intTa.value || '').trim() : '';
+                if (difficulty || intervention) pairs.push({ difficulty, intervention });
+              });
+              data.push({ grade, pairs });
+            });
+            try { storage.value = JSON.stringify(data); } catch (e) { storage.value = '[]'; }
+          }
+          serializeRMA('.rma-pretest-storage', '.rma-pretest-plan');
+          serializeRMA('.rma-eosy-storage', '.rma-eosy-plan');
     // Always hide thead when using repeated headers
     if (thead) thead.style.display = 'none';
     const pid = tbody.getAttribute('data-project-id');
@@ -540,7 +738,8 @@ document.addEventListener('DOMContentLoaded', function() {
       if (parts.length > 0) gradeLabel = parts[0];
     }
 
-    if (enrolment > 0 && sum !== enrolment) {
+    const mismatch = (sum !== enrolment) && (enrolment > 0 || sum > 0);
+    if (mismatch) {
       if (errorContainer && errorMessages) {
         errorContainer.style.display = 'flex';
         errorMessages.innerHTML = `<div class="message message--error">${gradeLabel} proficiency bands total (${sum}) must equal enrollment (${enrolment})</div>`;
@@ -553,7 +752,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Compact SLP banner (single card) similar to RMA style
     try {
-      const mismatch = enrolment > 0 && sum !== enrolment;
+      const mismatch = (sum !== enrolment) && (enrolment > 0 || sum > 0);
       const existing = subjectContent.querySelector('.slp-validation-banner');
       if (existing) existing.remove();
       if (mismatch) {
@@ -627,6 +826,8 @@ document.addEventListener('DOMContentLoaded', function() {
           if (el === offeredCheckbox) return;
           if (el.type === 'hidden') return;
           if (el.closest('.offered-checkbox')) return; // leave the control area enabled
+          // Always keep the per-subject save button enabled so users can save
+          if (el.classList && el.classList.contains('save-subject-btn')) return;
           // Use readOnly for input/textarea to keep values posted, disable buttons/selects
           if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
             try { el.readOnly = !enabled; } catch(e) {}
@@ -655,6 +856,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Restore LLC list and reasons selections from hidden storage
   function initializeSLPCompetenciesAndReasons() {
+    // Suppress dirty tracking during initial hydration
+    window._hydratingSLP = true;
     // Competencies paragraph (if empty, inject enumerated placeholders 1-4)
     document.querySelectorAll('.llc-section').forEach(section => {
       const ta = section.querySelector('textarea.llc-storage');
@@ -695,6 +898,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sc) rebuildInterventionsFor(sc);
       }
     });
+    // Release suppression after hydration completes
+    setTimeout(() => { window._hydratingSLP = false; }, 0);
   }
 
   // Build the interventions table from selected reasons; prefill from saved JSON if available
@@ -705,6 +910,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const storage = plan.querySelector('textarea.interventions-storage');
     let saved = [];
     try { saved = storage && storage.value ? JSON.parse(storage.value) : []; } catch (e) { saved = []; }
+
+    // Determine subject prefix for per-subject cache
+    const probe = subjectContent.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+    const ref = probe ? (probe.id || probe.name || '') : '';
+    const mPrefix = ref.match(/(slp_rows-\d+)/);
+    const prefix = mPrefix ? mPrefix[1] : null;
+    window._slpInterventionCache = window._slpInterventionCache || {};
+    if (prefix && !window._slpInterventionCache[prefix]) window._slpInterventionCache[prefix] = {};
+
+    // Capture current textarea values before clearing (unsaved interventions) into cache
+    if (pairsWrap) {
+      Array.from(pairsWrap.querySelectorAll('textarea.intervention-textarea')).forEach(ta => {
+        const code = ta.getAttribute('data-reason-code');
+        if (prefix && code) {
+          const val = (ta.value || '').trim();
+            if (val) window._slpInterventionCache[prefix][code] = val; // persist non-empty drafts
+        }
+      });
+    }
 
     // Collect selected reasons; substitute 'Other' text when present
     const selected = Array.from(subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked')).map(cb => {
@@ -749,8 +973,18 @@ document.addEventListener('DOMContentLoaded', function() {
       ta.rows = 2;
       ta.placeholder = 'Example: Conduct LAC on teaching the difficult-to-teach competencies';
       ta.setAttribute('data-reason-code', item.code);
-      const match = saved.find(s => s.code === item.code);
-      if (match && match.intervention) ta.value = match.intervention;
+      // Priority: unsaved draft cache > saved JSON
+      let prefill = prefix && window._slpInterventionCache[prefix] ? window._slpInterventionCache[prefix][item.code] : '';
+      if (!prefill) {
+        const match = saved.find(s => s.code === item.code);
+        prefill = match && match.intervention ? match.intervention : '';
+      }
+      if (prefill) ta.value = prefill;
+      // Update cache on input so draft persists across toggles
+      ta.addEventListener('input', () => {
+        const code = ta.getAttribute('data-reason-code');
+        if (prefix && code) window._slpInterventionCache[prefix][code] = ta.value;
+      });
       pairsWrap.appendChild(reasonDiv);
       pairsWrap.appendChild(ta);
     });
@@ -818,6 +1052,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const subjectIdInput = document.getElementById('id_current_subject_id');
     const subjectPrefixInput = document.getElementById('id_current_subject_prefix');
     const subjectIndexInput = document.getElementById('id_current_subject_index');
+    const tabInput = document.getElementById('id_tab');
 
     function inferFromSection(btn) {
       const section = btn.closest('.subject-content') || btn.closest('.card-section');
@@ -831,22 +1066,105 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.querySelectorAll('.save-subject-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
+      btn.addEventListener('click', function(e) {
+        // Always prevent the native submit; we'll decide explicitly
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        try { console.log('[SLP] Save Subject clicked', { id: this.dataset.subjectId, prefix: this.dataset.subjectPrefix, index: this.dataset.subjectIndex }); } catch(e) {}
+        try { window._lastSLPPrefix = this.dataset.subjectPrefix || window._lastSLPPrefix; } catch(e) {}
+        // Mark this subject dirty explicitly
+        try {
+          window._slpDirtyPrefixes = window._slpDirtyPrefixes || new Set();
+          if (this.dataset.subjectPrefix) window._slpDirtyPrefixes.add(this.dataset.subjectPrefix);
+        } catch(e) {}
+        // Validate proficiency enrollment match before allowing submit
+        const subjectContent = this.closest('.subject-content');
+        if (subjectContent) {
+          // Force recalculation (in case numbers just changed)
+          try { updateProficiencyDisplay(subjectContent); } catch(e) {}
+          const hasError = !!subjectContent.querySelector('.slp-proficiency-error');
+          if (hasError) {
+            // Scroll to first error input and prevent submission
+            const firstErr = subjectContent.querySelector('.proficiency-field input.error');
+            if (firstErr) {
+              firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              firstErr.focus();
+            }
+            // Add a transient toast/banner if not existing
+            if (!subjectContent.querySelector('.slp-validation-banner')) {
+              const banner = document.createElement('div');
+              banner.className = 'validation-errors validation-errors--compact slp-validation-banner';
+              banner.innerHTML = '<div class="error-icon">!</div><div class="error-messages"><div>Fix proficiency enrolment mismatch before saving.</div></div>';
+              subjectContent.insertBefore(banner, subjectContent.firstElementChild);
+            }
+            try { console.log('[SLP] Save blocked due to proficiency mismatch'); } catch(e) {}
+            return; // Abort; user must correct numbers; native submit already prevented
+          }
+          // Validate interventions (Question 4) if reasons selected
+          try {
+            const reasonsSelected = subjectContent.querySelectorAll('.reasons-section input.reason-choice:checked');
+            // Soft warnings only: allow partial save
+            const oldReasonsBanner = subjectContent.querySelector('.slp-reasons-banner');
+            if (oldReasonsBanner) oldReasonsBanner.remove();
+            const oldInterventionsBanner = subjectContent.querySelector('.slp-interventions-banner');
+            if (oldInterventionsBanner) oldInterventionsBanner.remove();
+            if (reasonsSelected.length === 0) {
+              const banner = document.createElement('div');
+              banner.className = 'validation-errors validation-errors--compact slp-reasons-banner';
+              banner.innerHTML = '<div class="error-icon">!</div><div class="error-messages"><div>Subject saved as In Progress: select at least one reason (Q3) later to complete.</div></div>';
+              const reasonsSection = subjectContent.querySelector('.reasons-section');
+              if (reasonsSection) reasonsSection.parentElement.insertBefore(banner, reasonsSection);
+            } else {
+              const interventionTextareas = subjectContent.querySelectorAll('.interventions-plan .intervention-textarea');
+              const blanks = Array.from(interventionTextareas).filter(ta => !(ta.value || '').trim());
+              interventionTextareas.forEach(ta => ta.classList.remove('error'));
+              if (blanks.length > 0) {
+                blanks.forEach(ta => ta.classList.add('error'));
+                const banner = document.createElement('div');
+                banner.className = 'validation-errors validation-errors--compact slp-interventions-banner';
+                banner.innerHTML = '<div class="error-icon">!</div><div class="error-messages"><div>Subject saved as In Progress: fill interventions for all selected reasons (Q4) to complete.</div></div>';
+                const interventionsSection = subjectContent.querySelector('.interventions-plan');
+                if (interventionsSection) interventionsSection.parentElement.insertBefore(banner, interventionsSection);
+              }
+            }
+          } catch (e2) { console.warn('[SLP] Interventions validation error', e2); }
+        }
         if (subjectIdInput) subjectIdInput.value = this.dataset.subjectId || subjectIdInput.value || '';
         if (subjectPrefixInput) subjectPrefixInput.value = this.dataset.subjectPrefix || subjectPrefixInput.value || '';
         if (subjectIndexInput) subjectIndexInput.value = this.dataset.subjectIndex || subjectIndexInput.value || '';
         if ((!subjectPrefixInput?.value || !subjectIndexInput?.value)) {
           inferFromSection(this);
         }
+        // Ensure tab stays on SLP for this targeted save
+        if (tabInput && tabInput.value !== 'slp') tabInput.value = 'slp';
+        try { console.log('[SLP] Hidden fields set', { current_subject_id: subjectIdInput?.value, current_subject_prefix: subjectPrefixInput?.value, current_subject_index: subjectIndexInput?.value, tab: tabInput?.value }); } catch(e) {}
+        // Submit the form after validations pass
+        form.requestSubmit ? form.requestSubmit() : form.submit();
       });
     });
 
     document.querySelectorAll('button[name="action"][value="save_draft"]').forEach(btn => {
       btn.addEventListener('click', function() {
+        try { console.log('[SLP] Save Draft clicked'); } catch(e) {}
         if (subjectIdInput) subjectIdInput.value = '';
         if (subjectPrefixInput) subjectPrefixInput.value = '';
         if (subjectIndexInput) subjectIndexInput.value = '';
       });
+    });
+
+    // Generic dirty tracking: any input/change inside a subject marks that prefix dirty
+    document.querySelectorAll('.subject-content').forEach(sc => {
+      const probe = sc.querySelector('input[id*="slp_rows-"][id$="-enrolment"], input[name*="slp_rows-"][name$="-enrolment"]');
+      const ref = probe ? (probe.id || probe.name || '') : '';
+      const mPrefix = ref.match(/(slp_rows-\d+)/);
+      if (!mPrefix) return;
+      const prefix = mPrefix[1];
+      const markDirty = () => {
+        if (window._hydratingSLP) return; // ignore programmatic initial population
+        window._slpDirtyPrefixes = window._slpDirtyPrefixes || new Set();
+        window._slpDirtyPrefixes.add(prefix);
+      };
+      sc.addEventListener('input', markDirty, { passive: true });
+      sc.addEventListener('change', markDirty, { passive: true });
     });
   }
   // ---------------- Cross-tab validation (Reading/RMA) ----------------
@@ -1052,7 +1370,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   function addADMPPA() {
-    const tbody = document.getElementById('adm-table-body');
+    let tbody = document.getElementById('adm-table-body');
+    if (!tbody) tbody = document.querySelector('.adm-table tbody');
     const template = document.querySelector('.adm-row-template');
     if (!tbody || !template) return;
     // Find TOTAL_FORMS for ADM formset by sampling template field name prefix
@@ -1067,6 +1386,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (total) total.value = String(idx + 1);
     // Refresh delete handlers and normalize labels to "Delete"
     try { attachADMDeleteHandlers(); } catch (e) {}
+    // Mark newly added row inputs dirty for autosave if user edits later
+    row.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('input', () => { window._admDirty = true; }, { passive: true });
+      el.addEventListener('change', () => { window._admDirty = true; }, { passive: true });
+    });
   }
 
   // Confirm ADM delete and normalize text to "Delete"
@@ -1257,6 +1581,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (admToggle) toggleADMFields(admToggle.checked);
     const addAdmBtn = document.getElementById('add-adm-ppa');
     if (addAdmBtn) addAdmBtn.addEventListener('click', function(e){ e.preventDefault(); addADMPPA(); });
+    // Ensure at least one ADM row exists when landing and no forms yet
+    try {
+      const admTotal = document.querySelector('input[name="adm_rows-TOTAL_FORMS"]');
+      const tbody = document.querySelector('.adm-table tbody');
+      if (admTotal && tbody && parseInt(admTotal.value || '0', 10) === 0) {
+        addADMPPA();
+      }
+    } catch (e) {}
     // PCT helpers
     wirePctValidation();
     // RMA/Reading validation wiring on demand

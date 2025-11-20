@@ -1704,6 +1704,13 @@ def smme_kpi_dashboard(request):
                     'adm': school_kpis['adm'],
                     'adm_class': get_performance_class(school_kpis['adm']),
                     'has_data': school_kpis['has_data'],
+                    # SLOP / Non-mastery reason occurrence counts (aggregated over included periods)
+                    'slop_prereq_count': school_kpis.get('slop_prereq_count', 0),
+                    'slop_llc_difficult_count': school_kpis.get('slop_llc_difficult_count', 0),
+                    'slop_llc_not_covered_count': school_kpis.get('slop_llc_not_covered_count', 0),
+                    'slop_sped_needs_count': school_kpis.get('slop_sped_needs_count', 0),
+                    'slop_reading_link_count': school_kpis.get('slop_reading_link_count', 0),
+                    'slop_other_count': school_kpis.get('slop_other_count', 0),
                 })
 
             # Cache the bulk table for later requests
